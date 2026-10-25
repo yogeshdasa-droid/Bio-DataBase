@@ -19,10 +19,18 @@ origen ya no hacen falta, y todo se edita desde la app.
 - Convierte la fuente antigua **Balaram** (`Kåñëa`) a IAST (`Kṛṣṇa`).
 - **Búsqueda** sin diacríticos y con variantes (`krishna` = `kṛṣṇa`), frases exactas,
   `palabra*`, `-excluir`, `OR`; filtros por colección, carpeta, texto o persona.
-- **Lector** con resaltado, marcadores y visor del **PDF original** guardado.
+- **Lector** con resaltado, marcadores y visor del **PDF original** guardado. Estilo de lectura
+  «Editor» (Markdown visible, como en VS Code), Literata o Inter.
+- Los **nombres** de otras fichas que aparecen en un texto son enlaces a su ficha.
+- **Imagen** propia para cada ficha; una ficha con un solo texto lo muestra directamente.
+- **Atrás / Adelante** como en un navegador (`Alt+←/→`).
 - **Edición** del texto y los datos; **papelera** con recuperación; **copia de seguridad**
   de todo en un solo archivo.
 - Español / inglés, tema claro / oscuro.
+
+## Descargar
+
+Instalador para Windows en [Releases](https://github.com/yogeshdasa-droid/Bio-DataBase/releases).
 
 ## Desarrollo
 
@@ -37,5 +45,7 @@ npm run app:build   # instalador en src-tauri/target/release/bundle/
 ```
 
 La base de datos está en `%APPDATA%\com.whispers.biodata\biodata.db`.
+
+Para continuar el desarrollo (estructura, reglas, pendientes): **[DESARROLLO.md](DESARROLLO.md)**.
 
 Hecho con Tauri 2, Rust (SQLite FTS5) y React.
