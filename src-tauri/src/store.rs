@@ -486,6 +486,7 @@ pub fn delete_person(conn: &mut Connection, id: i64) -> Res<()> {
         .collect::<Result<_, _>>()
         .map_err(e)?;
     tx.execute("UPDATE docs SET person_id = NULL WHERE person_id = ?1", [id]).map_err(e)?;
+    tx.execute("DELETE FROM person_photos WHERE person_id = ?1", [id]).map_err(e)?;
     tx.execute("DELETE FROM persons WHERE id = ?1", [id]).map_err(e)?;
     tx.execute("DELETE FROM persons_fts WHERE rowid = ?1", [id]).map_err(e)?;
     for d in docs {
@@ -535,6 +536,74 @@ fn join_text(a: &str, b: &str) -> String {
 
 /// Joins `from` into `into`: documents move over, empty fields are filled
 /// and the other name is kept as an alternative name.
+/// Removes the Obsidian callout marks ("> [!example] NAME", "> ") from the
+/// imported notes (once; new imports are cleaned while importing).
+/// Returns how many texts changed.
+pub fn clean_callouts(conn: &mut Connection) -> Res<usize> {
+    let tx = conn.transaction().map_err(e)?;
+    let ids: Vec<i64> = tx
+        .prepare("SELECT id FROM docs WHERE kind = 'md'")
+        .map_err(e)?
+        .query_map([], |r| r.get(0))
+        .map_err(e)?
+        .collect::<Result<_, _>>()
+        .map_err(e)?;
+    let mut changed = 0;
+    for id in ids {
+        let old: Vec<Section> = tx
+            .prepare_cached("SELECT heading, text FROM sections WHERE doc_id = ?1 ORDER BY ordinal")
+            .map_err(e)?
+            .query_map([id], |r| Ok(Section { heading: r.get(0)?, text: r.get(1)? }))
+            .map_err(e)?
+            .collect::<Result<_, _>>()
+            .map_err(e)?;
+        if !old.iter().any(|s| s.text.contains('>')) {
+            continue;
+        }
+        let new: Vec<Section> =
+            old.iter().map(|s| Section { heading: s.heading.clone(), text: text::strip_callouts(&s.text) }).collect();
+        if new.iter().zip(&old).all(|(n, o)| n.text == o.text) {
+            continue;
+        }
+        write_sections(&tx, id, &new).map_err(e)?;
+        changed += 1;
+    }
+    tx.commit().map_err(e)?;
+    Ok(changed)
+}
+
+/// Picture of a record, read from an image file and kept in the database.
+pub fn set_person_photo(conn: &Connection, id: i64, path: &std::path::Path) -> Res<()> {
+    let ext = path.extension().and_then(|x| x.to_str()).unwrap_or("").to_lowercase();
+    let mime = match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        "avif" => "image/avif",
+        _ => return Err(format!("Formato de imagen no admitido: .{ext}")),
+    };
+    let data = std::fs::read(path).map_err(e)?;
+    if data.len() > 25 * 1024 * 1024 {
+        return Err("La imagen es demasiado grande (máx. 25 MB).".into());
+    }
+    conn.execute(
+        "INSERT OR REPLACE INTO person_photos(person_id, mime, data) VALUES (?1, ?2, ?3)",
+        params![id, mime, data],
+    )
+    .map_err(e)?;
+    conn.execute("UPDATE persons SET modified = datetime('now', 'localtime') WHERE id = ?1", [id]).map_err(e)?;
+    Ok(())
+}
+
+pub fn remove_person_photo(conn: &Connection, id: i64) -> Res<()> {
+    conn.execute("DELETE FROM person_photos WHERE person_id = ?1", [id]).map_err(e)?;
+    conn.execute("UPDATE persons SET modified = datetime('now', 'localtime') WHERE id = ?1", [id]).map_err(e)?;
+    let _ = conn.execute_batch("PRAGMA incremental_vacuum;");
+    Ok(())
+}
+
 pub fn merge_persons(conn: &mut Connection, into: i64, from: &[i64]) -> Res<()> {
     let tx = conn.transaction().map_err(e)?;
     let mut f = get_fields(&tx, into).map_err(e)?;
@@ -558,6 +627,10 @@ pub fn merge_persons(conn: &mut Connection, into: i64, from: &[i64]) -> Res<()> 
         }
         f.notes = join_text(&f.notes, &o.notes);
         tx.execute("UPDATE docs SET person_id = ?1 WHERE person_id = ?2", params![into, other]).map_err(e)?;
+        // the picture of a merged record is kept only if this one has none
+        tx.execute("UPDATE OR IGNORE person_photos SET person_id = ?1 WHERE person_id = ?2", params![into, other])
+            .map_err(e)?;
+        tx.execute("DELETE FROM person_photos WHERE person_id = ?1", [other]).map_err(e)?;
         tx.execute("DELETE FROM persons WHERE id = ?1", [other]).map_err(e)?;
         tx.execute("DELETE FROM persons_fts WHERE rowid = ?1", [other]).map_err(e)?;
     }
@@ -599,6 +672,34 @@ mod tests {
         assert_eq!(person_key("Sri Jiva Goswami"), person_key("Jiva Gosvami"));
         assert_eq!(person_key("Lochana dasa"), person_key("Locana Das"));
         assert_ne!(person_key("Rupa Gosvami"), person_key("Rupa"));
+    }
+
+    #[test]
+    fn photos() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::db::init(&conn).unwrap();
+        let tx = conn.transaction().unwrap();
+        let a = create_person(&tx, "Rupa Gosvami").unwrap();
+        let b = create_person(&tx, "Sri Rupa").unwrap();
+        tx.commit().unwrap();
+        let dir = std::env::temp_dir().join(format!("bio-photo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let img = dir.join("rupa.PNG");
+        std::fs::write(&img, b"\x89PNG fake").unwrap();
+        assert!(set_person_photo(&conn, a, &dir.join("rupa.txt")).is_err(), "not an image");
+        set_person_photo(&conn, b, &img).unwrap();
+        assert_eq!(crate::search::get_photo(&conn, b).unwrap().unwrap().0, "image/png");
+        // merging moves the picture to a record that has none
+        merge_persons(&mut conn, a, &[b]).unwrap();
+        assert!(crate::search::get_photo(&conn, a).unwrap().is_some());
+        assert!(crate::search::get_person(&conn, a).unwrap().has_photo);
+        remove_person_photo(&conn, a).unwrap();
+        assert!(crate::search::get_photo(&conn, a).unwrap().is_none());
+        set_person_photo(&conn, a, &img).unwrap();
+        delete_person(&mut conn, a).unwrap();
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM person_photos", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0, "deleted with the record");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

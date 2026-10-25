@@ -74,6 +74,22 @@ pub fn plain(text: &str) -> String {
     RE_WS.replace_all(&t, " ").trim().to_string()
 }
 
+static RE_CALLOUT_LINE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^[ \t]*>[ \t]*\[![A-Za-z-]+\][+-]?[ \t]*(.*?)[ \t]*$").unwrap());
+static RE_QUOTE_MARK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^[ \t]*(?:>[ \t]?)+").unwrap());
+static RE_BLANKS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\n(?:[ \t]*\n){2,}").unwrap());
+
+/// Obsidian notes wrap everything in a callout ("> [!example] NAME", then
+/// "> text" lines). The callout title becomes a "## NAME" heading and the
+/// quote marks go away, so the text reads plainly.
+pub fn strip_callouts(text: &str) -> String {
+    let t = RE_CALLOUT_LINE.replace_all(text, |c: &regex::Captures| {
+        if c[1].is_empty() { String::new() } else { format!("## {}", &c[1]) }
+    });
+    let t = RE_QUOTE_MARK.replace_all(&t, "");
+    RE_BLANKS.replace_all(&t, "\n\n").trim().to_string()
+}
+
 // ---------------------------------------------------------------- sections
 
 pub struct Section {
@@ -257,6 +273,14 @@ pub fn snippet(text: &str, terms: &[Term], max_words: usize) -> (String, usize) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn callouts() {
+        let note = "> [!example] DURGA DASA\n> \n>He was a disciple of Srinivasa.\n>\n>\n> > nested\nplain > not a quote";
+        assert_eq!(strip_callouts(note), "## DURGA DASA\n\nHe was a disciple of Srinivasa.\n\nnested\nplain > not a quote");
+        assert_eq!(strip_callouts("> [!note]\n> text"), "text");
+        assert_eq!(strip_callouts("no callout here"), "no callout here");
+    }
 
     #[test]
     fn snippets() {

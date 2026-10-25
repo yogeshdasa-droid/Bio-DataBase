@@ -17,8 +17,12 @@ import {
 import { api, DocInfo, fileUrl, SectionText, TocEntry } from "../api";
 import { highlightDom, Term } from "../fold";
 import { formatDate, Lang, T } from "../i18n";
-import { renderMarkdown } from "../markdown";
+import { renderMarkdown, renderSource } from "../markdown";
+import { linkNames, NameIndex } from "../personLinks";
 import { CollectionChip } from "./ui";
+
+/** "editor" shows the markdown as written (monospace, coloured signs). */
+export type ReaderStyle = "editor" | "serif" | "sans";
 
 export interface ReaderTarget {
   docId: number;
@@ -33,11 +37,14 @@ interface Props {
   t: T;
   lang: Lang;
   fontSize: number;
-  serif: boolean;
+  readerStyle: ReaderStyle;
+  names: NameIndex | null;
   onFontSize: (n: number) => void;
   onOpenDoc: (docId: number, ordinal: number) => void;
   onPerson: (id: number) => void;
   onLoaded: (doc: DocInfo) => void;
+  /** the section being read (to come back to it with "Back") */
+  onSection: (docId: number, ordinal: number) => void;
   onSearchInDoc: (doc: DocInfo) => void;
   onBookmark: (docId: number, ordinal: number) => void;
   onEdit: (doc: DocInfo, section: SectionText) => void;
@@ -51,21 +58,38 @@ const WINDOW_BEFORE = 1;
 const WINDOW_AFTER = 2;
 const LOAD_STEP = 3;
 
-function SectionView({ s, terms, multi }: { s: SectionText; terms: Term[]; multi: boolean }) {
+export function SectionView({
+  s,
+  terms,
+  multi,
+  source,
+  names,
+  self,
+}: {
+  s: SectionText;
+  terms: Term[];
+  multi: boolean;
+  source: boolean;
+  /** names of the records, to link them in the text */
+  names: NameIndex | null;
+  /** the text's own record (not linked) */
+  self: number | null;
+}) {
   const ref = useRef<HTMLElement>(null);
-  const html = useMemo(() => renderMarkdown(s.text), [s.text]);
+  const html = useMemo(() => (source ? renderSource(s.text) : renderMarkdown(s.text)), [s.text, source]);
   useLayoutEffect(() => {
     const el = ref.current!;
     el.innerHTML = html;
+    linkNames(el, names, self);
     highlightDom(el, terms);
     // Obsidian image embeds point at files that are not in the database.
     el.querySelectorAll("img[data-attach]").forEach((i) => i.classList.add("missing"));
-  }, [html, terms]);
+  }, [html, terms, names, self]);
   return <section ref={ref} className={multi ? "sec multi" : "sec"} data-ord={s.ordinal} />;
 }
 
 export function Reader(p: Props) {
-  const { target, t, lang, fontSize, serif, onFontSize, onOpenDoc, onLoaded, onToast } = p;
+  const { target, t, lang, fontSize, readerStyle, onFontSize, onOpenDoc, onLoaded, onToast } = p;
   const [doc, setDoc] = useState<DocInfo | null>(null);
   const [toc, setToc] = useState<TocEntry[]>([]);
   const [sections, setSections] = useState<SectionText[]>([]);
@@ -140,7 +164,7 @@ export function Reader(p: Props) {
     const secEl = body.querySelector<HTMLElement>(`section[data-ord="${ps.ordinal}"]`);
     const firstMark = secEl?.querySelector<HTMLElement>("mark.hl.start");
     if (firstMark) focusMark(marks.indexOf(firstMark), false);
-    else if (secEl) {
+    else if (secEl && ps.ordinal > 0) {
       scroller.scrollTop = secEl.offsetTop - 16;
       setMarkIdx({ cur: 0, total: marks.length });
     } else scroller.scrollTop = 0;
@@ -149,6 +173,10 @@ export function Reader(p: Props) {
     void body.offsetWidth;
     body.classList.add("enter");
   }, [sections, focusMark, view]);
+
+  useEffect(() => {
+    if (doc && sections.length) p.onSection(doc.id, currentOrd);
+  }, [currentOrd, doc, sections.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = useCallback(
     async (dir: "up" | "down") => {
@@ -213,7 +241,8 @@ export function Reader(p: Props) {
     e.preventDefault();
     const wl = a.getAttribute("data-wikilink");
     try {
-      if (wl) {
+      if (a.dataset.person) p.onPerson(Number(a.dataset.person));
+      else if (wl) {
         const r = await api.resolveLink(wl);
         if (r.kind === "doc") onOpenDoc(r.id, 0);
         else if (r.kind === "person") p.onPerson(r.id);
@@ -362,11 +391,11 @@ export function Reader(p: Props) {
         <iframe className="pdf-frame" src={fileUrl("original", doc.id)} title={doc.original ?? doc.title} />
       ) : (
         <div className="reader-scroll" data-ctx="reader" ref={scrollRef} onScroll={onScroll}>
-          <div className={`reader-body ${serif ? "serif" : "sans"}`} style={{ fontSize }} ref={bodyRef} onClick={onBodyClick}>
+          <div className={`reader-body ${readerStyle === "editor" ? "src-view" : readerStyle}`} style={{ fontSize }} ref={bodyRef} onClick={onBodyClick}>
             {doc.size < 50 && <p className="muted no-text">{doc.original ? t.noTextHint : ""}</p>}
             {lo > 0 && <div className="more-hint">• • •</div>}
             {sections.map((s) => (
-              <SectionView key={s.id} s={s} terms={terms} multi={multi} />
+              <SectionView key={s.id} s={s} terms={terms} multi={multi} source={readerStyle === "editor"} names={p.names} self={doc.personId} />
             ))}
             {hi < count - 1 && <div className="more-hint">• • •</div>}
           </div>

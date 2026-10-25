@@ -460,6 +460,13 @@ pub fn get_file(conn: &Connection, doc_id: i64, role: &str) -> rusqlite::Result<
     .optional()
 }
 
+pub fn get_photo(conn: &Connection, person_id: i64) -> rusqlite::Result<Option<(String, Vec<u8>)>> {
+    conn.query_row("SELECT mime, data FROM person_photos WHERE person_id = ?1", [person_id], |r| {
+        Ok((r.get(0)?, r.get(1)?))
+    })
+    .optional()
+}
+
 /// The whole text of a document (for exporting).
 pub fn full_text(conn: &Connection, doc_id: i64) -> rusqlite::Result<String> {
     let mut st = conn.prepare("SELECT text FROM sections WHERE doc_id = ?1 ORDER BY ordinal")?;
@@ -478,6 +485,8 @@ pub struct PersonListItem {
     pub docs: i64,
     /// a document with a cover image
     pub cover_doc: Option<i64>,
+    /// a picture chosen for the record (served at /photo/<id>)
+    pub has_photo: bool,
 }
 
 pub fn list_persons(conn: &Connection) -> rusqlite::Result<Vec<PersonListItem>> {
@@ -485,11 +494,12 @@ pub fn list_persons(conn: &Connection) -> rusqlite::Result<Vec<PersonListItem>> 
         "SELECT p.id, p.name, p.aka,
                 (SELECT COUNT(*) FROM docs d WHERE d.person_id = p.id AND d.deleted IS NULL),
                 (SELECT f.doc_id FROM files f JOIN docs d ON d.id = f.doc_id
-                 WHERE d.person_id = p.id AND d.deleted IS NULL AND f.role = 'cover' ORDER BY d.title LIMIT 1)
+                 WHERE d.person_id = p.id AND d.deleted IS NULL AND f.role = 'cover' ORDER BY d.title LIMIT 1),
+                EXISTS(SELECT 1 FROM person_photos ph WHERE ph.person_id = p.id)
          FROM persons p ORDER BY p.name COLLATE NOCASE",
     )?;
     let rows = st.query_map([], |r| {
-        Ok(PersonListItem { id: r.get(0)?, name: r.get(1)?, aka: r.get(2)?, docs: r.get(3)?, cover_doc: r.get(4)? })
+        Ok(PersonListItem { id: r.get(0)?, name: r.get(1)?, aka: r.get(2)?, docs: r.get(3)?, cover_doc: r.get(4)?, has_photo: r.get(5)? })
     })?;
     rows.collect()
 }
@@ -513,6 +523,7 @@ pub struct Person {
     pub fields: crate::store::PersonFields,
     pub created: String,
     pub modified: String,
+    pub has_photo: bool,
     pub docs: Vec<PersonDoc>,
 }
 
@@ -557,7 +568,8 @@ pub fn get_person(conn: &Connection, id: i64) -> rusqlite::Result<Person> {
             })
         })?
         .collect::<Result<_, _>>()?;
-    Ok(Person { id, fields, created, modified, docs })
+    let has_photo = conn.query_row("SELECT EXISTS(SELECT 1 FROM person_photos WHERE person_id = ?1)", [id], |r| r.get(0))?;
+    Ok(Person { id, fields, created, modified, has_photo, docs })
 }
 
 /// Records whose name or fields match the query (same syntax as the main search).

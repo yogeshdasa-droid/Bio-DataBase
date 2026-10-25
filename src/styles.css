@@ -549,6 +549,14 @@ select {
   gap: 8px;
   flex-shrink: 0;
 }
+.nav-btns {
+  display: flex;
+  gap: 2px;
+}
+.nav-btns .icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
 .brand-name {
   font-weight: 700;
   font-size: 15px;
@@ -1490,6 +1498,82 @@ select {
 .reader-body.sans {
   font-family: var(--font-ui);
 }
+/* "Editor" style: markdown as written, like VS Code */
+.reader-body.src-view {
+  --md-head: #0451a5;
+  --md-code: #a31515;
+  --md-bullet: #0451a5;
+  --md-dim: #8a8177;
+  max-width: 980px;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-size: 0.9em;
+  line-height: 1.6;
+}
+:root[data-theme="dark"] .reader-body.src-view {
+  --md-head: #569cd6;
+  --md-code: #ce9178;
+  --md-bullet: #6796e6;
+  --md-dim: #808080;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .reader-body.src-view {
+    --md-head: #569cd6;
+    --md-code: #ce9178;
+    --md-bullet: #6796e6;
+    --md-dim: #808080;
+  }
+}
+.reader-body.src-view .ln {
+  white-space: pre-wrap;
+  min-height: 1.6em;
+}
+.reader-body.src-view .ln.h {
+  color: var(--md-head);
+  font-weight: 700;
+}
+.reader-body.src-view .md-b {
+  font-weight: 700;
+}
+.reader-body.src-view .md-i {
+  font-style: italic;
+}
+.reader-body.src-view .md-code,
+.reader-body.src-view .ln.code {
+  color: var(--md-code);
+}
+.reader-body.src-view .md-bullet {
+  color: var(--md-bullet);
+}
+.reader-body.src-view .ln.fence,
+.reader-body.src-view .ln.rule,
+.reader-body.src-view .md-punct {
+  color: var(--md-dim);
+}
+.reader-body.src-view a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  border-bottom: 0;
+}
+.reader-body.src-view a:hover {
+  color: var(--md-head);
+}
+/* names of other records, linked to their record */
+.reader-body a.person-link {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 3px;
+}
+.reader-body a.person-link:hover {
+  color: var(--accent-text);
+  text-decoration-style: solid;
+}
+.reader-body.src-view .tag {
+  color: var(--md-head);
+}
+.font-editor {
+  font-family: "Cascadia Code", Consolas, monospace;
+}
 .reader-body .sec.multi {
   padding-bottom: 14px;
   margin-bottom: 22px;
@@ -1736,6 +1820,9 @@ select {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+.form-grid + .text-label {
+  margin-top: 14px;
 }
 .text-label em {
   font-style: normal;
@@ -2075,6 +2162,16 @@ select {
   .toggle {
     display: none;
   }
+  /* the search box gives way so the buttons on the right stay visible */
+  .searchbox {
+    min-width: 0;
+  }
+  .top-actions {
+    flex-shrink: 0;
+  }
+  .topbar {
+    gap: 10px;
+  }
   .stats {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -2103,11 +2200,19 @@ button.logo {
   cursor: pointer;
   padding: 0;
 }
+/* four tabs: icons only, the active one wider with its name */
 .tabs.four {
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
 }
-.tabs.four .tab-ink {
-  width: calc((100% - 6px) / 4);
+.tabs.four button {
+  flex: 1 1 0;
+  min-width: 0;
+  transition: flex-grow 0.3s var(--ease), background 0.2s;
+}
+.tabs.four button.active {
+  flex-grow: 2.6;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 .tabs.four button:not(.active) span {
   display: none;
@@ -2119,7 +2224,9 @@ button.logo {
 /* ---- person list */
 .person-filter {
   position: sticky;
-  top: 0;
+  /* flush with the top of the scroll area (it has 4px padding), so rows
+     never peek above the box */
+  top: -4px;
   z-index: 2;
   display: flex;
   align-items: center;
@@ -2130,6 +2237,7 @@ button.logo {
   background: var(--panel-solid);
   border: 1px solid var(--border);
   color: var(--muted);
+  box-shadow: 0 6px 8px -2px var(--panel-solid);
 }
 .person-filter input:not([type="checkbox"]) {
   flex: 1;
@@ -2212,11 +2320,60 @@ button.logo {
   color: #fff;
   background: var(--accent-grad);
   box-shadow: var(--shadow);
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.person-cover > * {
+  grid-area: 1 / 1;
 }
 .person-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+/* hover: "Add / change picture" */
+.cover-overlay {
+  align-self: stretch;
+  justify-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.person-cover:hover .cover-overlay,
+.person-cover:focus-visible .cover-overlay {
+  opacity: 1;
+}
+.person-cover-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.cover-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.person-cover-wrap:hover .cover-remove {
+  opacity: 1;
 }
 .person-title {
   min-width: 0;
@@ -2308,6 +2465,52 @@ button.logo {
   color: var(--muted);
   font-weight: 650;
   margin: 0 0 10px;
+}
+/* a record's single text, shown inside the record */
+.inline-doc {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  animation: pop 0.35s var(--ease) both;
+}
+.inline-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--sunken);
+}
+.inline-head .tc-title {
+  font-weight: 600;
+}
+.inline-head .kind {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.inline-doc .reader-body {
+  max-width: none;
+  margin: 0;
+  padding: 18px 22px 22px;
+}
+.person-view .inline-doc section.sec {
+  margin-top: 0;
+}
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.add-text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
 }
 .text-cards {
   display: grid;

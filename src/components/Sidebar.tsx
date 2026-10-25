@@ -230,9 +230,7 @@ export function Sidebar(p: Props) {
             <I size={15} />
             <span>{label}</span>
           </button>
-        ))}
-        <span className="tab-ink" style={{ transform: `translateX(${tabs.findIndex((x) => x[0] === p.tab) * 100}%)` }} />
-      </nav>
+        ))}      </nav>
 
       <div className="side-scroll" key={p.tab}>
         {p.tab === "persons" && <PersonList t={t} lang={p.lang} persons={p.persons} activeId={p.activePersonId} onPerson={p.onPerson} />}

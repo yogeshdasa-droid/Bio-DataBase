@@ -120,6 +120,7 @@ export interface PersonListItem {
   aka: string;
   docs: number;
   coverDoc: number | null;
+  hasPhoto: boolean;
 }
 
 export interface PersonDoc {
@@ -135,6 +136,7 @@ export interface Person extends PersonFields {
   id: number;
   created: string;
   modified: string;
+  hasPhoto: boolean;
   docs: PersonDoc[];
 }
 
@@ -214,6 +216,8 @@ export const api = {
   updatePerson: (id: number, fields: PersonFields) => invoke<void>("update_person", { id, fields }),
   deletePerson: (id: number) => invoke<void>("delete_person", { id }),
   mergePersons: (into: number, from: number[]) => invoke<void>("merge_persons", { into, from }),
+  setPersonPhoto: (id: number, path: string) => invoke<void>("set_person_photo", { id, path }),
+  removePersonPhoto: (id: number) => invoke<void>("remove_person_photo", { id }),
 
   createDoc: (personId: number | null, title: string, collection: string) =>
     invoke<number>("create_doc", { personId, title, collection }),
@@ -237,8 +241,8 @@ export const api = {
   openExternal: (target: string) => invoke<void>("open_external", { target }),
 };
 
-/** URL of a file stored in the database (cover image or original PDF). */
-export function fileUrl(role: "cover" | "original", docId: number): string {
+/** URL of a file stored in the database (cover image, original PDF, or a record's picture by person id). */
+export function fileUrl(role: "cover" | "original" | "photo", docId: number): string {
   return navigator.userAgent.includes("Windows") ? `http://bio.localhost/${role}/${docId}` : `bio://localhost/${role}/${docId}`;
 }
 

@@ -79,7 +79,13 @@ export function Home({ t, lang, status, facets, persons, recent, bookmarks, onCo
             <div className="person-grid">
               {top.map((p, i) => (
                 <button key={p.id} data-ctx="person" data-id={p.id} className="person-card" style={{ animationDelay: `${i * 35}ms` }} onClick={() => onPerson(p.id)}>
-                  <span className="pc-cover">{p.coverDoc ? <img src={fileUrl("cover", p.coverDoc)} alt="" loading="lazy" /> : <UserRound size={22} />}</span>
+                  <span className="pc-cover">{p.hasPhoto ? (
+                      <img src={fileUrl("photo", p.id)} alt="" loading="lazy" />
+                    ) : p.coverDoc ? (
+                      <img src={fileUrl("cover", p.coverDoc)} alt="" loading="lazy" />
+                    ) : (
+                      <UserRound size={22} />
+                    )}</span>
                   <span className="pc-name">{p.name}</span>
                   <span className="pc-count">{t.documents(p.docs)}</span>
                 </button>

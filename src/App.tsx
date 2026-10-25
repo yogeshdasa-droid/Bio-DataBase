@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  ArrowLeft,
+  ArrowRight,
   ClipboardPaste,
   Copy,
   Download,
@@ -48,10 +50,11 @@ import {
   Status,
 } from "./api";
 import { dicts, Lang } from "./i18n";
+import { buildNameIndex } from "./personLinks";
 import { EditDialog, ImportDialog, MergeDialog, PersonDialog, TrashDialog } from "./components/Dialogs";
 import { Home, RecentDoc } from "./components/Home";
 import { EMPTY_FILTERS, Filters, hasFilter, Results } from "./components/Results";
-import { Reader, ReaderTarget } from "./components/Reader";
+import { Reader, ReaderStyle, ReaderTarget } from "./components/Reader";
 import { PersonView } from "./components/PersonView";
 import { Settings, SettingsTab, Theme } from "./components/Settings";
 import { SideTab, Sidebar } from "./components/Sidebar";
@@ -93,7 +96,7 @@ type Dialog =
 export default function App() {
   const [lang, setLang] = usePersisted<Lang>("language", "es");
   const [theme, setTheme] = usePersisted<Theme>("theme", "system");
-  const [serif, setSerif] = usePersisted("serif", true);
+  const [readerStyle, setReaderStyle] = usePersisted<ReaderStyle>("readerStyle", "editor");
   const [fontSize, setFontSize] = usePersisted("fontSize", 18);
   const [titlesOnly, setTitlesOnly] = usePersisted("titlesOnly", false);
   const [prefix, setPrefix] = usePersisted("prefix", false);
@@ -132,6 +135,67 @@ export default function App() {
 
   const target = main.kind === "doc" ? main.target : null;
   const personId = main.kind === "person" ? main.id : null;
+  // names of the records, linked wherever a text mentions them
+  const nameIndex = useMemo(() => buildNameIndex(persons), [persons]);
+
+  // ---- back / forward, like a browser. Every change of `main` is a step;
+  // a text is remembered at the section that was being read.
+  const backStack = useRef<Main[]>([]);
+  const fwdStack = useRef<Main[]>([]);
+  const prevMain = useRef<Main>(main);
+  const travelling = useRef(false);
+  const readingOrd = useRef(new Map<number, number>()); // docId → section being read
+  const [, setNavTick] = useState(0);
+  const samePlace = (a: Main, b: Main) =>
+    a.kind === b.kind && (a.kind === "home" || (a.kind === "person" ? a.id === (b as typeof a).id : a.target.docId === (b as typeof a).target.docId));
+  const withPosition = (m: Main): Main =>
+    m.kind === "doc" ? { ...m, target: { ...m.target, ordinal: readingOrd.current.get(m.target.docId) ?? m.target.ordinal } } : m;
+  useEffect(() => {
+    const prev = prevMain.current;
+    prevMain.current = main;
+    if (travelling.current) {
+      travelling.current = false;
+      return;
+    }
+    if (samePlace(prev, main)) return;
+    backStack.current = [...backStack.current, withPosition(prev)].slice(-60);
+    fwdStack.current = [];
+    setNavTick((n) => n + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [main]);
+  const travel = useCallback((dir: "back" | "fwd") => {
+    const from = dir === "back" ? backStack : fwdStack;
+    const to = dir === "back" ? fwdStack : backStack;
+    const m = from.current[from.current.length - 1];
+    if (!m) return;
+    from.current = from.current.slice(0, -1);
+    to.current = [...to.current, withPosition(prevMain.current)];
+    travelling.current = true;
+    setMain(m.kind === "doc" ? { ...m, target: { ...m.target, nonce: Date.now() } } : m);
+    setNavTick((n) => n + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        travel(e.key === "ArrowLeft" ? "back" : "fwd");
+      }
+    };
+    // the mouse's side buttons
+    const onMouse = (e: MouseEvent) => {
+      if (e.button === 3 || e.button === 4) {
+        e.preventDefault();
+        travel(e.button === 3 ? "back" : "fwd");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mouseup", onMouse);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mouseup", onMouse);
+    };
+  }, [travel]);
 
   // The results pane follows the search: it opens when there is a query or a
   // filter and closes when both are cleared. The toolbar button / Ctrl+J
@@ -630,8 +694,24 @@ export default function App() {
   const reloadPerson = () => setPersonReload((n) => n + 1);
 
   const pct = progress && progress.total ? Math.round((progress.done / progress.total) * 100) : null;
+  // In a narrow window the side panes give way so the reader always fits:
+  // first the results pane shrinks, then the sidebar.
+  const [winW, setWinW] = useState(window.innerWidth);
+  useEffect(() => {
+    const on = () => setWinW(window.innerWidth);
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  const MAIN_MIN = 380;
+  let side = sideOpen ? sideW : 0;
+  let res = resultsOpen ? resW : 0;
+  const spare = winW - MAIN_MIN - (sideOpen ? 5 : 0) - (resultsOpen ? 5 : 0);
+  if (side + res > spare) {
+    if (resultsOpen) res = Math.max(260, spare - side);
+    if (sideOpen && side + res > spare) side = Math.max(190, spare - res);
+  }
   const panesStyle = {
-    gridTemplateColumns: `${sideOpen ? `${sideW}px 5px ` : ""}${resultsOpen ? `${resW}px 5px ` : ""}minmax(360px, 1fr)`,
+    gridTemplateColumns: `${sideOpen ? `${side}px 5px ` : ""}${resultsOpen ? `${res}px 5px ` : ""}minmax(0, 1fr)`,
   } as React.CSSProperties;
 
   if (fatal) {
@@ -657,6 +737,14 @@ export default function App() {
           <button className={`icon-btn ${resultsOpen ? "on" : ""}`} onClick={() => setResultsOpen((o) => !o)} title={t.toggleResults}>
             <ListIcon size={18} />
           </button>
+          <span className="nav-btns">
+            <button className="icon-btn" disabled={!backStack.current.length} onClick={() => travel("back")} title={t.goBack}>
+              <ArrowLeft size={18} />
+            </button>
+            <button className="icon-btn" disabled={!fwdStack.current.length} onClick={() => travel("fwd")} title={t.goForward}>
+              <ArrowRight size={18} />
+            </button>
+          </span>
         </div>
         <div className="searchbox">
           <Search size={18} />
@@ -773,11 +861,13 @@ export default function App() {
             t={t}
             lang={lang}
             fontSize={fontSize}
-            serif={serif}
+            readerStyle={readerStyle}
+            names={nameIndex}
             onFontSize={setFontSize}
             onOpenDoc={openDoc}
             onPerson={openPerson}
             onLoaded={onDocLoaded}
+            onSection={(docId, ord) => readingOrd.current.set(docId, ord)}
             onSearchInDoc={(doc) => {
               setFilters((f) => ({ ...f, doc: { id: doc.id, title: doc.title } }));
               searchRef.current?.focus();
@@ -805,7 +895,15 @@ export default function App() {
             onAddText={addTextFor}
             onFindMentions={findMentions}
             onSearchIn={searchInPerson}
+            onEditDoc={(docId) => editSectionOf(docId, 0)}
+            onPhotoChanged={() => {
+              reloadPerson();
+              refreshAll();
+            }}
             onToast={showToast}
+            readerStyle={readerStyle}
+            fontSize={fontSize}
+            names={nameIndex}
           />
         )}
         {main.kind === "home" && (
@@ -871,11 +969,11 @@ export default function App() {
           lang={lang}
           status={status}
           theme={theme}
-          serif={serif}
+          readerStyle={readerStyle}
           initialTab={dialog.tab}
           onLang={setLang}
           onTheme={setTheme}
-          onSerif={setSerif}
+          onReaderStyle={setReaderStyle}
           onClose={() => setDialog(null)}
           onToast={showToast}
           onChanged={refreshAll}
@@ -895,7 +993,9 @@ export default function App() {
           onSaved={(docId, ordinal) => {
             setDialog(null);
             showToast(t.saved);
-            setMain({ kind: "doc", target: { docId, ordinal, terms: target?.terms ?? [], nonce: Date.now() } });
+            // edited from a record (its single text shown inline): stay there
+            if (main.kind === "person") reloadPerson();
+            else setMain({ kind: "doc", target: { docId, ordinal, terms: target?.terms ?? [], nonce: Date.now() } });
             refreshAll();
           }}
         />

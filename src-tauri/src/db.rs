@@ -7,7 +7,8 @@ use std::path::Path;
 
 /// Format of the data tables. A newer value means a newer program wrote the
 /// file: it is refused instead of risking the user's data.
-pub const DATA_VERSION: u32 = 1;
+/// 2: + person_photos (created empty on open; nothing else changes).
+pub const DATA_VERSION: u32 = 2;
 /// Bump when the folding rules or the FTS layout change: the search tables
 /// are rebuilt from `sections` / `docs` / `persons` (no data is lost).
 pub const FTS_VERSION: &str = "1";
@@ -85,6 +86,13 @@ CREATE TABLE IF NOT EXISTS bookmarks(
     heading TEXT,
     note TEXT NOT NULL DEFAULT '',
     created TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+-- picture chosen by the user for a record (format 2)
+CREATE TABLE IF NOT EXISTS person_photos(
+    person_id INTEGER PRIMARY KEY,
+    mime TEXT NOT NULL,
+    data BLOB NOT NULL
 );
 "#;
 

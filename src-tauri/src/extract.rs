@@ -40,6 +40,7 @@ pub fn read_document(path: &Path, bytes: &[u8]) -> Option<String> {
         "docx" => docx(bytes)?,
         "doc" => legacy_doc(bytes),
         "html" | "htm" => html(&crate::text::decode(bytes)),
+        "md" | "markdown" => crate::text::strip_callouts(&crate::text::decode(bytes)),
         _ => crate::text::decode(bytes),
     };
     Some(if is_balaram(&text) { balaram_to_iast(&text) } else { text })

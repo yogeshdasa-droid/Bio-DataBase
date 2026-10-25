@@ -39,6 +39,68 @@ export function renderMarkdown(src: string): string {
   return DOMPurify.sanitize(html, { ADD_ATTR: ["data-attach", "data-wikilink", "target"] });
 }
 
+/** Inline marks of one escaped source line: the markdown signs stay visible. */
+function sourceInline(s: string): string {
+  return (
+    s
+      // `code`
+      .replace(/(`+)([^`]+?)\1/g, '<span class="md-code">$1$2$1</span>')
+      // [[target|alias]] → clickable, brackets kept
+      .replace(/(!?)\[\[([^\]|]+)((?:\|[^\]]*)?)\]\]/g, (_m, bang: string, target: string, alias: string) =>
+        `<a data-wikilink="${target.replace(/#.*/, "").trim()}">${bang}[[${target}${alias}]]</a>`,
+      )
+      // [text](https://…)
+      .replace(/\[([^\]]+)\]\(((?:https?:|mailto:)[^)\s]+)\)/g, '<span class="md-punct">[</span><a href="$2">$1</a><span class="md-punct">]($2)</span>')
+      // **bold** / __bold__
+      .replace(/(\*\*|__)(?=\S)(.+?)(?<=\S)\1/g, '<strong class="md-b">$1$2$1</strong>')
+      // *italic* / _italic_
+      .replace(/(^|[^\w*])([*_])(?=\S)([^*_]+?)(?<=\S)\2(?![\w*])/g, '$1<em class="md-i">$2$3$2</em>')
+      // #tags
+      .replace(/(^|[\s(])#(\p{L}[\p{L}\p{N}_/-]*)/gu, '$1<span class="tag">#$2</span>')
+  );
+}
+
+/**
+ * Markdown shown as written, like a code editor: monospace, the signs
+ * (##, **, `, -) visible and coloured. Each line is one block.
+ */
+export function renderSource(src: string): string {
+  const lines = src
+    .replace(/[ \t]\^[A-Za-z0-9-]{3,}[ \t]*$/gm, "")
+    .replace(/\r\n?/g, "\n")
+    // runs of empty lines (also "> " alone inside callouts) read as one
+    .replace(/\n(?:[ \t>]*\n){2,}/g, "\n\n")
+    .replace(/^\s+|\s+$/g, "")
+    .split("\n");
+  let fence = false;
+  const out = lines.map((raw) => {
+    const line = esc(raw);
+    if (/^\s*(```|~~~)/.test(raw)) {
+      fence = !fence;
+      return `<div class="ln fence">${line}</div>`;
+    }
+    if (fence) return `<div class="ln code">${line || " "}</div>`;
+    if (!raw.trim()) return '<div class="ln blank"> </div>';
+    let m = /^(#{1,6})(\s.*)$/.exec(line);
+    if (m) return `<div class="ln h h${m[1].length}">${m[1]}${sourceInline(m[2])}</div>`;
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(raw)) return `<div class="ln rule">${line}</div>`;
+    m = /^(\s*)([-*+]|\d+[.)])(\s+)(.*)$/.exec(line);
+    if (m) {
+      const w = m[1].length + m[2].length + m[3].length;
+      return `<div class="ln li" style="padding-left:${w}ch;text-indent:-${w}ch">${m[1]}<span class="md-bullet">${m[2]}</span>${m[3]}${sourceInline(m[4])}</div>`;
+    }
+    m = /^(\s*(?:&gt;\s*)+)(.*)$/.exec(line);
+    if (m) {
+      // Obsidian callout "> [!example] TITLE": the tag dimmed, the title as a heading
+      const c = /^(\[![\w-]+\][+-]?)(.*)$/.exec(m[2]);
+      if (c) return `<div class="ln quote h"><span class="md-bullet">${m[1]}</span><span class="md-punct">${c[1]}</span>${sourceInline(c[2])}</div>`;
+      return `<div class="ln quote"><span class="md-bullet">${m[1]}</span>${sourceInline(m[2])}</div>`;
+    }
+    return `<div class="ln">${sourceInline(line)}</div>`;
+  });
+  return DOMPurify.sanitize(out.join(""), { ADD_ATTR: ["data-wikilink"] });
+}
+
 /** Resolves <img data-attach> placeholders to local files. */
 export async function resolveImages(
   root: HTMLElement,

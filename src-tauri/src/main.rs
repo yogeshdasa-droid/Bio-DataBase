@@ -218,6 +218,16 @@ async fn merge_persons(state: State<'_, AppState>, into: i64, from: Vec<i64>) ->
     store::merge_persons(&mut state.conn.lock().unwrap(), into, &from)
 }
 
+#[tauri::command]
+async fn set_person_photo(state: State<'_, AppState>, id: i64, path: String) -> CmdResult<()> {
+    store::set_person_photo(&state.conn.lock().unwrap(), id, std::path::Path::new(&path))
+}
+
+#[tauri::command]
+async fn remove_person_photo(state: State<'_, AppState>, id: i64) -> CmdResult<()> {
+    store::remove_person_photo(&state.conn.lock().unwrap(), id)
+}
+
 // ---------------------------------------------------------------- editing
 
 #[tauri::command]
@@ -363,11 +373,22 @@ fn serve_file(app: &AppHandle, uri: &str) -> tauri::http::Response<Vec<u8>> {
     let (Some(role), Some(id)) = (parts.next(), parts.next().and_then(|s| s.parse::<i64>().ok())) else {
         return not_found();
     };
-    if role != "cover" && role != "original" {
+    if role != "cover" && role != "original" && role != "photo" {
         return not_found();
     }
     let state = app.state::<AppState>();
     let Ok(conn) = state.conn.lock() else { return not_found() };
+    if role == "photo" {
+        // can change at any time: never cached
+        return match search::get_photo(&conn, id) {
+            Ok(Some((mime, data))) => tauri::http::Response::builder()
+                .header("Content-Type", mime)
+                .header("Cache-Control", "no-store")
+                .body(data)
+                .unwrap(),
+            _ => not_found(),
+        };
+    }
     match search::get_file(&conn, id, role) {
         Ok(Some((mime, _, data))) => tauri::http::Response::builder()
             .header("Content-Type", mime)
@@ -397,6 +418,18 @@ fn main() {
             let first_run = startup_error.is_none() && db::get_meta(&conn, "initial_import")?.is_none();
             if first_run {
                 db::set_meta(&conn, "initial_import", "1")?;
+                db::set_meta(&conn, "callouts_cleaned", "1")?; // the import cleans them
+            }
+            let mut conn = conn;
+            if startup_error.is_none() && db::get_meta(&conn, "callouts_cleaned")?.is_none() {
+                // One-time cleanup of the notes imported before; a copy of the
+                // database is kept next to it first.
+                let copy = dir.join("biodata antes de limpiar notas.db");
+                if !copy.exists() {
+                    conn.execute("VACUUM INTO ?1", [copy.to_string_lossy()])?;
+                }
+                store::clean_callouts(&mut conn)?;
+                db::set_meta(&conn, "callouts_cleaned", "1")?;
             }
             app.manage(AppState {
                 db_path,
@@ -442,6 +475,8 @@ fn main() {
             update_person,
             delete_person,
             merge_persons,
+            set_person_photo,
+            remove_person_photo,
             create_doc,
             save_section,
             update_doc,

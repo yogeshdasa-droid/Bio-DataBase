@@ -4,6 +4,7 @@ import { DatabaseBackup, FolderInput, HelpCircle, RefreshCw, Settings as Gear, T
 import { api, DefaultSource, Status, Trashed } from "../api";
 import { Lang, T } from "../i18n";
 import { Kbd, Modal } from "./ui";
+import type { ReaderStyle } from "./Reader";
 
 export type Theme = "system" | "light" | "dark";
 export type SettingsTab = "general" | "sources" | "trash" | "help";
@@ -13,11 +14,11 @@ interface Props {
   lang: Lang;
   status: Status | null;
   theme: Theme;
-  serif: boolean;
+  readerStyle: ReaderStyle;
   initialTab: SettingsTab;
   onLang: (l: Lang) => void;
   onTheme: (t: Theme) => void;
-  onSerif: (s: boolean) => void;
+  onReaderStyle: (s: ReaderStyle) => void;
   onClose: () => void;
   onToast: (msg: string) => void;
   onChanged: () => void;
@@ -92,12 +93,11 @@ export function Settings(p: Props) {
               </div>
               <h3>{t.readerFont}</h3>
               <div className="seg">
-                <button className={p.serif ? "on font-serif" : "font-serif"} onClick={() => p.onSerif(true)}>
-                  {t.serif} · Kṛṣṇa uvāca
-                </button>
-                <button className={!p.serif ? "on" : ""} onClick={() => p.onSerif(false)}>
-                  {t.sans} · Kṛṣṇa uvāca
-                </button>
+                {(["editor", "serif", "sans"] as ReaderStyle[]).map((st) => (
+                  <button key={st} className={`font-${st} ${p.readerStyle === st ? "on" : ""}`} onClick={() => p.onReaderStyle(st)}>
+                    {st === "editor" ? t.editorStyle : st === "serif" ? t.serif : t.sans} · Kṛṣṇa uvāca
+                  </button>
+                ))}
               </div>
               <h3>{t.database}</h3>
               {status && (
