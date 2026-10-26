@@ -773,7 +773,7 @@ export default function App() {
   if (fatal) {
     return (
       <div className="empty-state" style={{ height: "100%", justifyContent: "center" }}>
-        <h2>Bio-Data</h2>
+        <h2>Gaudiya Vaisnavas DB</h2>
         <p style={{ whiteSpace: "pre-wrap", maxWidth: 520 }}>{fatal}</p>
       </div>
     );
@@ -787,9 +787,9 @@ export default function App() {
             {sideOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
           </button>
           <button className="logo" onClick={() => setMain({ kind: "home" })} title={t.home}>
-            B
+            G
           </button>
-          <span className="brand-name">Bio-Data</span>
+          <span className="brand-name">Gaudiya Vaisnavas DB</span>
           <button className={`icon-btn ${resultsOpen ? "on" : ""}`} onClick={() => setResultsOpen((o) => !o)} title={t.toggleResults}>
             <ListIcon size={18} />
           </button>

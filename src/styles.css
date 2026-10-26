@@ -561,6 +561,7 @@ select {
   font-weight: 700;
   font-size: 15px;
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 .logo {
   width: 30px;
@@ -2194,7 +2195,7 @@ select {
   background: transparent;
 }
 
-/* ================================================================ Bio-Data */
+/* ================================================================ Gaudiya Vaisnavas DB */
 button.logo {
   border: 0;
   cursor: pointer;

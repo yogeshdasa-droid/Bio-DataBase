@@ -1,7 +1,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 
 /** Where new versions are published. */
-const LATEST = "https://api.github.com/repos/yogeshdasa-droid/Bio-DataBase/releases/latest";
+const LATEST = "https://api.github.com/repos/yogeshdasa-droid/Gaudiya-Vaisnavas-DB/releases/latest";
 
 export interface Update {
   version: string;

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Bio-Data",
-  "version": "0.3.0",
+  "productName": "Gaudiya Vaisnavas DB",
+  "version": "0.3.1",
   "identifier": "com.whispers.biodata",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Bio-Data",
+        "title": "Gaudiya Vaisnavas DB",
         "width": 1440,
         "height": 900,
         "minWidth": 900,
@@ -36,7 +36,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "shortDescription": "Bio-Data: biografias vaisnavas",
+    "shortDescription": "Gaudiya Vaisnavas DB: biografias vaisnavas",
     "windows": {
       "nsis": { "languages": ["Spanish", "English"], "displayLanguageSelector": true }
     }

@@ -1,11 +1,11 @@
-# Bio-Data — guía para continuar el proyecto
+# Gaudiya Vaisnavas DB — guía para continuar el proyecto
 
 Documento para retomar el trabajo en el futuro (una persona o una sesión nueva de Claude).
 Resume qué es la app, cómo está hecha, qué reglas no hay que romper y qué queda pendiente.
-Última actualización: **26-10-2026** (versión **0.3.0**, publicada).
+Última actualización: **26-10-2026** (versión **0.3.1**).
 
 > **Para retomar con Claude**, basta con abrir esta carpeta y decir algo como:
-> «Lee `DESARROLLO.md` y continuamos con Bio-Data: quiero cambiar…».
+> «Lee `DESARROLLO.md` y continuamos con Gaudiya Vaisnavas DB: quiero cambiar…».
 
 ---
 
@@ -15,7 +15,7 @@ Aplicación de escritorio para **Windows** con **biografías vaiṣṇavas**: un
 o devoto, con todos los textos sobre esa persona y búsqueda instantánea.
 
 - Hecha con **Tauri 2** (ventana WebView2), **Rust** (SQLite + búsqueda FTS5) y **React + TypeScript**.
-- Repositorio: https://github.com/yogeshdasa-droid/Bio-DataBase (público). Rama `main`.
+- Repositorio: https://github.com/yogeshdasa-droid/Gaudiya-Vaisnavas-DB (público). Rama `main`.
 - Hermana de **GaudiyaDB** (`G:\Whispers\W-DataBase`), de la que se copió la base del código,
   pero es un **proyecto independiente**: no se toca nada de esa carpeta desde aquí, y las dos
   apps pueden estar abiertas a la vez.
@@ -28,9 +28,11 @@ la app. Un solo archivo lo contiene todo (y la copia de seguridad es ese archivo
 
 - Base de datos: `%APPDATA%\com.whispers.biodata\biodata.db` (≈ 240 MB).
 - **Copias de seguridad**: automáticas (por defecto cada semana, se guardan las 3 últimas) en
-  `%APPDATA%\com.whispers.biodata\copias\` («Bio-Data automática AAAA-MM-DD.db»). Ajustes › Copias de
-  seguridad: hacer una ahora, cambiar la frecuencia, ver la lista, **restaurar** (antes de restaurar se
-  guarda sola «Bio-Data antes de restaurar …») y borrar. Las copias hechas antes de cambios grandes
+  **`Documentos\Gaudiya Vaisnavas DB\Copias de seguridad\`** («Gaudiya Vaisnavas DB automática
+  AAAA-MM-DD.db»), **fuera** de la carpeta de la app: desinstalar con «borrar los datos» no se las lleva
+  (la 0.3.0 las ponía en `%APPDATA%\…\copias`, que también se lista). Ajustes › Copias de seguridad:
+  hacer una ahora, cambiar la frecuencia, ver la lista, **restaurar** (antes de restaurar se guarda sola
+  «… antes de restaurar …») y borrar. Las copias hechas antes de cambios grandes
   («biodata antes de …db», junto a la base de datos) también salen en esa lista.
 - La base de datos **no** está en GitHub (es del usuario y es grande).
 
@@ -40,7 +42,7 @@ El instalador trae **solo el programa, no los datos**. Los datos están en el ar
 `biodata.db`. Para tenerlo todo en otro PC:
 
 1. En este PC: Ajustes › Copias de seguridad › **Guardar una copia en otro sitio…** (un pendrive, por ejemplo).
-2. En el otro PC: instalar Bio-Data, abrirlo y en Ajustes › Copias de seguridad › **Restaurar desde un
+2. En el otro PC: instalar Gaudiya Vaisnavas DB, abrirlo y en Ajustes › Copias de seguridad › **Restaurar desde un
    archivo…** elegir esa copia.
 
 Si no se restaura nada, la primera vez intenta importar las carpetas de `DEFAULT_SOURCES`
@@ -90,7 +92,7 @@ npm run app:build      # generar el instalador
   a una carpeta y arrancar con `$env:BIO_DB = "C:\carpeta\biodata.db"; npm run app:dev`
   (`BIO_DB` solo funciona en modo pruebas). Las copias automáticas van entonces a `C:\carpeta\copias`.
 - No lanzar `cargo test` mientras `app:dev` está compilando: a veces el enlazador falla
-  («unresolved external symbol»); se arregla con `cargo clean -p bio-data` y volver a compilar.
+  («unresolved external symbol»); se arregla con `cargo clean -p gaudiya-vaisnavas-db` y volver a compilar.
 
 ### Probar la interfaz desde Claude (capturas y clics)
 
@@ -109,10 +111,10 @@ Para probar cosas que modifican datos, crear fichas de prueba (p. ej. «Zzprueba
 ### Publicar una versión nueva
 
 1. Subir el número de versión en `package.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`.
-2. `npm run app:build` → `src-tauri/target/release/bundle/nsis/Bio-Data_X.Y.Z_x64-setup.exe`
-   (y el programa suelto en `src-tauri/target/release/bio-data.exe`).
+2. `npm run app:build` → `src-tauri/target/release/bundle/nsis/Gaudiya Vaisnavas DB_X.Y.Z_x64-setup.exe`
+   (y el programa suelto en `src-tauri/target/release/gaudiya-vaisnavas-db.exe`).
 3. Commit + push, y luego la release en GitHub:
-   `gh release create vX.Y.Z <instalador> <exe renombrado> --target main --title "Bio-Data X.Y.Z" --notes-file notas.md`
+   `gh release create vX.Y.Z <instalador> <exe renombrado> --target main --title "Gaudiya Vaisnavas DB X.Y.Z" --notes-file notas.md`
 
 ---
 
@@ -208,7 +210,7 @@ Lo de antes:
   El arrastre está hecho a mano (mousedown/mousemove): el arrastre del navegador no funciona porque
   Tauri lo usa para importar archivos.
 - **Estilo de la app** (Ajustes › General): **«VS Code» por defecto** (colores Dark/Light Modern de
-  VS Code, letra Segoe UI, esquinas rectas, sin degradados) o «Bio-Data (anterior)». Es solo CSS:
+  VS Code, letra Segoe UI, esquinas rectas, sin degradados) o «Clásico (anterior)». Es solo CSS:
   bloque `data-skin="vscode"` al final de `styles.css`; `index.html` lo aplica antes de pintar.
 - **Una ficha con un solo texto** lo muestra directamente; con varios, tarjetas.
 - **Unir fichas** (sugiere nombres parecidos; nunca marca nada solo). Al unir, los textos y la
@@ -291,12 +293,21 @@ hacerlo de momento por el tiempo y el uso de Claude; si se hace, por tandas y co
 
 ## 8. Historial
 
+- **26-10-2026 — v0.3.1**: la app pasa a llamarse **Gaudiya Vaisnavas DB** (antes Bio-Data): ventana,
+  instalador, programa (`gaudiya-vaisnavas-db`), repositorio de GitHub (renombrado; los enlaces
+  antiguos redirigen). El identificador `com.whispers.biodata` **no cambia**: así la base de datos y
+  los ajustes siguen en el mismo sitio. Las copias automáticas pasan a Documentos.
+  Motivo: al instalar la 0.3.0 se desinstaló la 0.2.1 con «borrar los datos de la aplicación»; la
+  carpeta `%APPDATA%\com.whispers.biodata` quedó vacía y la app reimportó todo desde cero (sin las
+  fichas rellenadas). Se recuperó con la copia de prueba de esa mañana; lo reimportado quedó en
+  `copias\antes de recuperar 2026-10-26`. **Al desinstalar, no marcar «borrar los datos».**
+
 - **26-10-2026 — v0.3.0**: copias automáticas y restaurar; versiones anteriores;
   calendario vaiṣṇava (calculado + importado de .ics); etiquetas; galería; guru/discípulos enlazados;
   Revisar (repetidas, títulos, vacíos); línea de tiempo; árbol dibujado; filtros Paramparā y tipo;
   exportar a Markdown; aviso de versión nueva. DATA_VERSION 4 (solo tablas nuevas, vacías).
   Probado con una copia de la base de datos (`BIO_DB`); 22 pruebas automáticas. GIF de novedades en
-  `docs/novedades-0.3.0.gif` (capturas por CDP + gifenc). Release: https://github.com/yogeshdasa-droid/Bio-DataBase/releases/tag/v0.3.0
+  `docs/novedades-0.3.0.gif` (capturas por CDP + gifenc). Release: https://github.com/yogeshdasa-droid/Gaudiya-Vaisnavas-DB/releases/tag/v0.3.0
 
 - **26-10-2026**: rellenadas a mano (Claude leyó sus textos) las 33 fichas de la Guru Paramparā:
   aparición, desaparición, lugar, guru, discípulos, obras, otros nombres y notas (padres, identidad
@@ -309,9 +320,9 @@ hacerlo de momento por el tiempo y el uso de Claude; si se hace, por tandas y co
   Personas en «Guru Paramparā» (árbol, arrastrar y soltar) y «Otros vaiṣṇavas».
   DATA_VERSION 3 (tabla `person_tree`). Copia previa: `biodata antes de parampara.db`.
   La v0.1.0 ya no abre esta base de datos (formato 3): instalar la 0.2.0.
-  Release: https://github.com/yogeshdasa-droid/Bio-DataBase/releases/tag/v0.2.0
+  Release: https://github.com/yogeshdasa-droid/Gaudiya-Vaisnavas-DB/releases/tag/v0.2.0
 
 - **25-10-2026 — v0.1.0**: primera versión publicada. Revisión completa de la interfaz;
   estilo «Editor»; texto único dentro de la ficha; atrás/adelante; imagen de ficha
   (DATA_VERSION 2); limpieza de callouts de Obsidian; nombres como enlaces; arreglos de ventana
-  estrecha, pestañas y filtro. Release: https://github.com/yogeshdasa-droid/Bio-DataBase/releases/tag/v0.1.0
+  estrecha, pestañas y filtro. Release: https://github.com/yogeshdasa-droid/Gaudiya-Vaisnavas-DB/releases/tag/v0.1.0

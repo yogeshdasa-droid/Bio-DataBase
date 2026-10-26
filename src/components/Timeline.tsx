@@ -43,6 +43,7 @@ export function Timeline({ t, lang, reload, onPerson }: { t: T; lang: Lang; relo
             </label>
           </header>
           {list === null && <span className="spinner" />}
+          {list !== null && shown.length === 0 && <p className="muted">{t.timelineEmpty}</p>}
           {groups.map(([c, people]) => (
             <section key={c}>
               <h2>{t.century(c)}</h2>

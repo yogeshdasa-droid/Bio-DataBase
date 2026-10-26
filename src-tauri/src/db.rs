@@ -196,7 +196,7 @@ pub fn init(conn: &Connection) -> Result<bool, String> {
     let stored: Option<u32> = get_meta(conn, "data").map_err(|e| e.to_string())?.and_then(|v| v.parse().ok());
     if let Some(s) = stored.filter(|s| *s > DATA_VERSION) {
         return Err(format!(
-            "Esta base de datos es de una versión más nueva de Bio-Data (formato {s}, este programa usa {DATA_VERSION}).\n\
+            "Esta base de datos es de una versión más nueva de Gaudiya Vaisnavas DB (formato {s}, este programa usa {DATA_VERSION}).\n\
              Abre la versión más reciente del programa."
         ));
     }

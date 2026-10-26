@@ -337,7 +337,7 @@ async fn save_original(state: State<'_, AppState>, doc_id: i64, path: String) ->
 async fn open_original(app: AppHandle, state: State<'_, AppState>, doc_id: i64) -> CmdResult<()> {
     let file = search::get_file(&state.conn.lock().unwrap(), doc_id, "original").map_err(err)?;
     let (_, name, data) = file.ok_or("Este documento no tiene archivo original guardado")?;
-    let dir = std::env::temp_dir().join("Bio-Data");
+    let dir = std::env::temp_dir().join("Gaudiya Vaisnavas DB");
     std::fs::create_dir_all(&dir).map_err(err)?;
     let target = dir.join(format!("{doc_id}-{name}"));
     std::fs::write(&target, data).map_err(err)?;
@@ -395,7 +395,7 @@ async fn backup_now(state: State<'_, AppState>) -> CmdResult<String> {
     let stamp: String = conn
         .query_row("SELECT strftime('%Y-%m-%d %H%M', 'now', 'localtime')", [], |r| r.get(0))
         .map_err(err)?;
-    let target = backup::copies_dir(&state.db_path).join(format!("Bio-Data {stamp}.db"));
+    let target = backup::copies_dir(&state.db_path).join(format!("Gaudiya Vaisnavas DB {stamp}.db"));
     backup::copy_to(&conn, &target)?;
     Ok(target.to_string_lossy().to_string())
 }
@@ -614,7 +614,15 @@ fn main() {
             std::fs::create_dir_all(&dir)?;
             // BIO_DB (only in development builds) points at a test copy instead
             let test_db = cfg!(debug_assertions).then(|| std::env::var_os("BIO_DB")).flatten();
+            let testing = test_db.is_some();
             let db_path = test_db.map(PathBuf::from).unwrap_or_else(|| dir.join("biodata.db"));
+            // the copies live in Documents, outside the program's data folder:
+            // uninstalling with "delete the application data" must not take them
+            if !testing {
+                if let Ok(docs) = app.path().document_dir() {
+                    backup::set_copies_dir(docs.join("Gaudiya Vaisnavas DB").join("Copias de seguridad"));
+                }
+            }
             let conn = db::open(&db_path)?;
             // A database problem is shown in the window instead of closing silently.
             let init = db::init(&conn);
@@ -764,5 +772,5 @@ fn main() {
             path_kinds
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Bio-Data");
+        .expect("error while running Gaudiya Vaisnavas DB");
 }

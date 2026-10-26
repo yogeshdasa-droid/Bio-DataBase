@@ -1,5 +1,7 @@
 //! Backup copies of the database: automatic ones (every few days, the last
-//! few kept) in the `copias` folder next to it, and restoring any copy.
+//! few kept) in a folder outside the program's own (Documents), so that
+//! uninstalling with "delete the application data" does not take them too;
+//! and restoring any copy.
 
 use crate::db;
 use rusqlite::{Connection, OpenFlags};
@@ -14,12 +16,27 @@ fn e(x: impl std::fmt::Display) -> String {
 }
 
 /// Names of the automatic copies start like this (only these are pruned).
-const AUTO_PREFIX: &str = "Bio-Data automática ";
+const AUTO_PREFIX: &str = "Gaudiya Vaisnavas DB automática ";
+/// …and did so when the program was called Bio-Data (v0.3.0).
+const OLD_AUTO_PREFIX: &str = "Bio-Data automática ";
 /// Default: every 7 days, the last 3 kept.
 const DEFAULT_DAYS: u32 = 7;
 const DEFAULT_KEEP: u32 = 3;
 
+/// Where the copies go, set once at start (Documents\Gaudiya Vaisnavas DB\Copias de seguridad).
+static COPIES: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+pub fn set_copies_dir(dir: PathBuf) {
+    let _ = COPIES.set(dir);
+}
+
+/// The folder of the copies; without one set, `copias` next to the database.
 pub fn copies_dir(db_path: &Path) -> PathBuf {
+    COPIES.get().cloned().unwrap_or_else(|| old_copies_dir(db_path))
+}
+
+/// Where v0.3.0 kept them (inside the program's data folder).
+fn old_copies_dir(db_path: &Path) -> PathBuf {
     db_path.parent().unwrap_or(Path::new(".")).join("copias")
 }
 
@@ -119,12 +136,14 @@ pub struct Copy {
     pub auto: bool,
 }
 
-/// Copies in the `copias` folder and the ones made before a big change,
-/// next to the database. Newest first.
+/// Copies in the copies folder, in the old `copias` folder, and the ones made
+/// before a big change next to the database. Newest first.
 pub fn list_copies(db_path: &Path) -> Vec<Copy> {
     let mut out = Vec::new();
     let main = db_path.file_name().map(|n| n.to_os_string());
-    for dir in [copies_dir(db_path), db_path.parent().unwrap_or(Path::new(".")).to_path_buf()] {
+    let mut dirs = vec![copies_dir(db_path), old_copies_dir(db_path), db_path.parent().unwrap_or(Path::new(".")).to_path_buf()];
+    dirs.dedup();
+    for dir in dirs {
         let Ok(rd) = std::fs::read_dir(&dir) else { continue };
         for entry in rd.flatten() {
             let p = entry.path();
@@ -135,7 +154,7 @@ pub fn list_copies(db_path: &Path) -> Vec<Copy> {
             let name = p.file_stem().and_then(|n| n.to_str()).unwrap_or("").to_string();
             out.push(Copy {
                 path: p.to_string_lossy().to_string(),
-                auto: name.starts_with(AUTO_PREFIX.trim_end()),
+                auto: name.starts_with(AUTO_PREFIX.trim_end()) || name.starts_with(OLD_AUTO_PREFIX.trim_end()),
                 name,
                 size: md.len(),
                 modified: md.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0),
@@ -154,16 +173,16 @@ pub fn delete_copy(db_path: &Path, path: &str) -> Res<()> {
     std::fs::remove_file(path).map_err(e)
 }
 
-/// Checks that `path` is a Bio-Data database this program can open.
+/// Checks that `path` is a database of this program that it can open.
 pub fn check_copy(path: &Path) -> Res<()> {
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
         .map_err(|_| "No se puede abrir el archivo".to_string())?;
     let version: Option<u32> = db::get_meta(&conn, "data").ok().flatten().and_then(|v| v.parse().ok());
     let Some(v) = version else {
-        return Err("Este archivo no es una base de datos de Bio-Data".into());
+        return Err("Este archivo no es una base de datos de Gaudiya Vaisnavas DB".into());
     };
     if v > db::DATA_VERSION {
-        return Err(format!("La copia es de una versión más nueva de Bio-Data (formato {v}); actualiza el programa primero."));
+        return Err(format!("La copia es de una versión más nueva de Gaudiya Vaisnavas DB (formato {v}); actualiza el programa primero."));
     }
     conn.query_row("SELECT COUNT(*) FROM persons", [], |r| r.get::<_, i64>(0))
         .and_then(|_| conn.query_row("SELECT COUNT(*) FROM docs", [], |r| r.get::<_, i64>(0)))
@@ -175,7 +194,7 @@ pub fn check_copy(path: &Path) -> Res<()> {
 /// connection to `db_path`; it is closed, the files are swapped, and the
 /// new connection is returned. What there was before is kept as a copy first.
 pub fn restore(conn: Connection, db_path: &Path, src: &Path) -> (Connection, Res<PathBuf>) {
-    let safety = copies_dir(db_path).join(format!("Bio-Data antes de restaurar {}.db", stamp(&conn, true)));
+    let safety = copies_dir(db_path).join(format!("Gaudiya Vaisnavas DB antes de restaurar {}.db", stamp(&conn, true)));
     if let Err(x) = copy_to(&conn, &safety) {
         return (conn, Err(format!("No se pudo guardar lo actual antes de restaurar: {x}")));
     }

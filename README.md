@@ -1,9 +1,11 @@
-# Bio-Data
+# Gaudiya Vaisnavas DB
+
+*(antes «Bio-Data»)*
 
 Aplicación de escritorio para Windows con **biografías vaiṣṇavas**: fichas de cada santo,
 sus textos y búsqueda instantánea. Hermana de [GaudiyaDB](https://github.com/yogeshdasa-droid/GaudiyaDB).
 
-A diferencia de GaudiyaDB, Bio-Data es **autosuficiente**: al importar, el texto, las portadas
+A diferencia de GaudiyaDB, Gaudiya Vaisnavas DB es **autosuficiente**: al importar, el texto, las portadas
 y los PDF / Word originales se copian **dentro de la base de datos**. Después las carpetas de
 origen ya no hacen falta, y todo se edita desde la app.
 
@@ -28,7 +30,7 @@ origen ya no hacen falta, y todo se edita desde la app.
 - **Atrás / Adelante** como en un navegador (`Alt+←/→`).
 - **Edición** del texto y los datos; **papelera** con recuperación; **versiones anteriores**
   de cada texto y ficha para deshacer cambios.
-- **Copias de seguridad automáticas** (todo está en un solo archivo) y **restaurar** desde Ajustes.
+- **Copias de seguridad automáticas** (todo está en un solo archivo) en *Documentos\Gaudiya Vaisnavas DB\Copias de seguridad*, y **restaurar** desde Ajustes.
 - **Guru Paramparā** como árbol (arrastrar para ordenar, y dibujada) y **línea de tiempo**.
 - **Calendario vaiṣṇava**: hoy y los próximos días con las apariciones y desapariciones de las
   fichas, Ekādaśī y festivales. Importa tu calendario Gauḍīya (`.ics`); lo que no está en él se
@@ -40,7 +42,7 @@ origen ya no hacen falta, y todo se edita desde la app.
 
 ## Descargar
 
-Instalador para Windows en [Releases](https://github.com/yogeshdasa-droid/Bio-DataBase/releases).
+Instalador para Windows en [Releases](https://github.com/yogeshdasa-droid/Gaudiya-Vaisnavas-DB/releases).
 
 ## Desarrollo
 

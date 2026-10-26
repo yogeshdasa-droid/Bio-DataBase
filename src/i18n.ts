@@ -56,7 +56,7 @@ const es = {
   themeDark: "Oscuro",
   skin: "Estilo de la app",
   skinVscode: "VS Code",
-  skinClassic: "Bio-Data (anterior)",
+  skinClassic: "Clásico (anterior)",
   readerFont: "Estilo de lectura",
   editorStyle: "Editor (Markdown visible)",
   serif: "Literata",
@@ -84,7 +84,7 @@ const es = {
   ] as [string, string][],
   shortcutsTitle: "Atajos de teclado",
   // home
-  welcome: "Bio-Data",
+  welcome: "Gaudiya Vaisnavas DB",
   tagline: "Biografías vaiṣṇavas: todo dentro de una sola base de datos",
   statPersons: "fichas",
   statDocs: "textos",
@@ -193,7 +193,7 @@ const es = {
   importHint: "Copia archivos o carpetas (.md, .txt, .pdf, .docx, .doc, .html) dentro de la base de datos",
   dropTitle: "Suelta para importar",
   dropSub: "Archivos .md, .txt, .pdf, .docx, .doc, .html o carpetas",
-  importTitle: "Importar a Bio-Data",
+  importTitle: "Importar a Gaudiya Vaisnavas DB",
   importSummary: (files: number, dirs: number) =>
     [files ? `${files} ${files === 1 ? "archivo" : "archivos"}` : "", dirs ? `${dirs} ${dirs === 1 ? "carpeta" : "carpetas"}` : ""]
       .filter(Boolean)
@@ -293,6 +293,7 @@ const es = {
   // timeline, tree, export
   timeline: "Línea de tiempo",
   timelineHint: "Las fichas con un año de aparición o desaparición escrito, por orden. Las barras van de la aparición a la desaparición.",
+  timelineEmpty: "Ninguna ficha tiene todavía un año escrito en Aparición o Desaparición. Edita las fichas (por ejemplo «1486» o «1407 Saka») y aparecerán aquí.",
   treeView: "Árbol de la Paramparā",
   treeViewHint: "La Guru Paramparā dibujada. Pincha en un nombre para abrir su ficha; ordénala arrastrando en la barra lateral.",
   onlyParampara: "Solo la Guru Paramparā",
@@ -303,7 +304,7 @@ const es = {
   exporting: "Exportando",
   exportPerson: "Exportar la ficha con sus textos (.md)…",
   printPerson: "Imprimir la ficha…",
-  updateAvailable: (v: string) => `Hay una versión nueva de Bio-Data: ${v}`,
+  updateAvailable: (v: string) => `Hay una versión nueva de Gaudiya Vaisnavas DB: ${v}`,
   updateDownload: "Descargar el instalador",
   updateNotes: "Novedades",
   updateNone: "Tienes la última versión.",
@@ -423,7 +424,7 @@ const en: Dict = {
   themeDark: "Dark",
   skin: "App style",
   skinVscode: "VS Code",
-  skinClassic: "Bio-Data (previous)",
+  skinClassic: "Classic (previous)",
   readerFont: "Reading style",
   editorStyle: "Editor (visible Markdown)",
   serif: "Literata",
@@ -450,7 +451,7 @@ const en: Dict = {
     ["Esc", "Clear search / close"],
   ],
   shortcutsTitle: "Keyboard shortcuts",
-  welcome: "Bio-Data",
+  welcome: "Gaudiya Vaisnavas DB",
   tagline: "Vaiṣṇava biographies, all inside one database",
   statPersons: "records",
   statDocs: "texts",
@@ -555,7 +556,7 @@ const en: Dict = {
   importHint: "Copy files or folders (.md, .txt, .pdf, .docx, .doc, .html) into the database",
   dropTitle: "Drop to import",
   dropSub: ".md, .txt, .pdf, .docx, .doc, .html files or folders",
-  importTitle: "Import into Bio-Data",
+  importTitle: "Import into Gaudiya Vaisnavas DB",
   importSummary: (files, dirs) =>
     [files ? `${files} ${files === 1 ? "file" : "files"}` : "", dirs ? `${dirs} ${dirs === 1 ? "folder" : "folders"}` : ""]
       .filter(Boolean)
@@ -651,6 +652,7 @@ const en: Dict = {
   onlyParamparaHint: "Only the texts of the records in the Guru Paramparā",
   timeline: "Timeline",
   timelineHint: "The records with a year of appearance or disappearance written, in order. The bars go from appearance to disappearance.",
+  timelineEmpty: "No record has a year written in Appearance or Disappearance yet. Edit the records (for example “1486” or “1407 Saka”) and they will show up here.",
   treeView: "Paramparā tree",
   treeViewHint: "The Guru Paramparā drawn. Click a name to open its record; reorder it by dragging in the sidebar.",
   onlyParampara: "Only the Guru Paramparā",
@@ -661,7 +663,7 @@ const en: Dict = {
   exporting: "Exporting",
   exportPerson: "Export the record with its texts (.md)…",
   printPerson: "Print the record…",
-  updateAvailable: (v) => `A new version of Bio-Data is out: ${v}`,
+  updateAvailable: (v) => `A new version of Gaudiya Vaisnavas DB is out: ${v}`,
   updateDownload: "Download the installer",
   updateNotes: "What's new",
   updateNone: "You have the latest version.",

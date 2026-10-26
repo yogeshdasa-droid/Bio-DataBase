@@ -134,13 +134,13 @@ function Backups({ t, lang, onToast }: { t: T; lang: Lang; onToast: (msg: string
   };
   const saveAs = async () => {
     const day = new Date().toISOString().slice(0, 10);
-    const path = await save({ defaultPath: `Bio-Data ${day}.db`, filters: [{ name: "Bio-Data", extensions: ["db"] }] });
+    const path = await save({ defaultPath: `Gaudiya Vaisnavas DB ${day}.db`, filters: [{ name: "Gaudiya Vaisnavas DB", extensions: ["db"] }] });
     if (!path) return;
     await api.backup(path);
     onToast(t.backupDone);
   };
   const fromFile = async () => {
-    const path = await open({ multiple: false, filters: [{ name: "Bio-Data", extensions: ["db"] }] });
+    const path = await open({ multiple: false, filters: [{ name: "Gaudiya Vaisnavas DB", extensions: ["db"] }] });
     if (typeof path === "string") await restore(path, path.split(/[\\/]/).pop() ?? path);
   };
 
