@@ -2,7 +2,7 @@
 
 Documento para retomar el trabajo en el futuro (una persona o una sesión nueva de Claude).
 Resume qué es la app, cómo está hecha, qué reglas no hay que romper y qué queda pendiente.
-Última actualización: **26-10-2026** (versión **0.2.0**).
+Última actualización: **26-10-2026** (versión **0.2.1**).
 
 > **Para retomar con Claude**, basta con abrir esta carpeta y decir algo como:
 > «Lee `DESARROLLO.md` y continuamos con Bio-Data: quiero cambiar…».
@@ -151,7 +151,7 @@ Direcciones internas de archivos (las sirve `serve_file` en `main.rs`):
 
 ---
 
-## 5. Qué hace hoy (v0.2.0)
+## 5. Qué hace hoy (v0.2.1)
 
 - **Fichas**: nombre, otros nombres, aparición, desaparición, lugar, guru, discípulos, obras,
   notas y **una imagen** (pinchar en el cuadro grande; se guarda en `person_photos`).
@@ -160,7 +160,8 @@ Direcciones internas de archivos (las sirve `serve_file` en `main.rs`):
   ficha = su discípulo; en el borde de arriba / abajo = antes / después; a «Otros vaiṣṇavas» = sacarla
   (sus discípulos suben a su lugar). También en el menú del botón derecho. Tabla `person_tree`
   (DATA_VERSION 3); al unir o borrar fichas el árbol se mantiene. La primera vez se rellena sola con
-  la línea habitual desde Śrī Caitanya (`PARAMPARA` en `store.rs`, meta `parampara_seeded`).
+  la línea habitual desde Śrī Caitanya (`PARAMPARA` en `store.rs`, meta `parampara_seeded`;
+  `seed_parampara_once` en `main.rs`, al arrancar y al terminar una importación, solo si ya hay fichas).
   El arrastre está hecho a mano (mousedown/mousemove): el arrastre del navegador no funciona porque
   Tauri lo usa para importar archivos.
 - **Estilo de la app** (Ajustes › General): **«VS Code» por defecto** (colores Dark/Light Modern de
@@ -214,6 +215,9 @@ Resultado: 2.301 textos, 1.883 fichas, 7 duplicados omitidos, 0 fallos.
 ---
 
 ## 8. Historial
+
+- **26-10-2026 — v0.2.1**: arreglo: en una instalación nueva la Guru Paramparā salía vacía
+  (se rellenaba antes de la importación inicial, cuando aún no había fichas).
 
 - **26-10-2026 — v0.2.0**: estilo de la app «VS Code» (por defecto; el anterior sigue en Ajustes).
   Personas en «Guru Paramparā» (árbol, arrastrar y soltar) y «Otros vaiṣṇavas».

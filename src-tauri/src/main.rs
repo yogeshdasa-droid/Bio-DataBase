@@ -102,9 +102,25 @@ fn start_import(app: &AppHandle, opts: import::Options) -> CmdResult<()> {
         let summary = import::run(conn, &opts, |p| {
             let _ = app.emit("import-progress", p);
         })?;
+        // after the first import the records exist: the Guru Paramparā can start
+        let _ = seed_parampara_once(conn);
         let _ = app.emit("import-done", summary);
         Ok(())
     })
+}
+
+/// Fills the Guru Paramparā with the usual line the first time there are
+/// records (never again: the user may have emptied it on purpose).
+fn seed_parampara_once(conn: &mut Connection) -> CmdResult<()> {
+    if db::get_meta(conn, "parampara_seeded").map_err(err)?.is_some() {
+        return Ok(());
+    }
+    let persons: i64 = conn.query_row("SELECT COUNT(*) FROM persons", [], |r| r.get(0)).map_err(err)?;
+    if persons > 0 {
+        store::seed_parampara(conn)?;
+        db::set_meta(conn, "parampara_seeded", "1").map_err(err)?;
+    }
+    Ok(())
 }
 
 fn start_rebuild(app: &AppHandle) -> CmdResult<()> {
@@ -436,11 +452,8 @@ fn main() {
                 store::clean_callouts(&mut conn)?;
                 db::set_meta(&conn, "callouts_cleaned", "1")?;
             }
-            if startup_error.is_none() && !first_run && db::get_meta(&conn, "parampara_seeded")?.is_none() {
-                // One-time: the Guru Paramparā starts with the usual line.
-                if store::seed_parampara(&mut conn).is_ok() {
-                    db::set_meta(&conn, "parampara_seeded", "1")?;
-                }
+            if startup_error.is_none() {
+                let _ = seed_parampara_once(&mut conn);
             }
             app.manage(AppState {
                 db_path,
