@@ -487,6 +487,7 @@ pub fn delete_person(conn: &mut Connection, id: i64) -> Res<()> {
         .map_err(e)?;
     tx.execute("UPDATE docs SET person_id = NULL WHERE person_id = ?1", [id]).map_err(e)?;
     tx.execute("DELETE FROM person_photos WHERE person_id = ?1", [id]).map_err(e)?;
+    tree_remove(&tx, id).map_err(e)?;
     tx.execute("DELETE FROM persons WHERE id = ?1", [id]).map_err(e)?;
     tx.execute("DELETE FROM persons_fts WHERE rowid = ?1", [id]).map_err(e)?;
     for d in docs {
@@ -631,11 +632,169 @@ pub fn merge_persons(conn: &mut Connection, into: i64, from: &[i64]) -> Res<()> 
         tx.execute("UPDATE OR IGNORE person_photos SET person_id = ?1 WHERE person_id = ?2", params![into, other])
             .map_err(e)?;
         tx.execute("DELETE FROM person_photos WHERE person_id = ?1", [other]).map_err(e)?;
+        // in the Guru Paramparā the record that stays takes the place of the
+        // merged one if it has none; otherwise the merged one just leaves it
+        if tree_parent(&tx, into).map_err(e)?.is_none() {
+            tx.execute("UPDATE person_tree SET person_id = ?1 WHERE person_id = ?2", params![into, other]).map_err(e)?;
+            tx.execute("UPDATE person_tree SET parent_id = ?1 WHERE parent_id = ?2", params![into, other]).map_err(e)?;
+        } else {
+            tree_remove(&tx, other).map_err(e)?;
+        }
         tx.execute("DELETE FROM persons WHERE id = ?1", [other]).map_err(e)?;
         tx.execute("DELETE FROM persons_fts WHERE rowid = ?1", [other]).map_err(e)?;
     }
     write_person(&tx, into, &f)?;
     tx.commit().map_err(e)
+}
+
+// ---------------------------------------------------------------- guru paramparā
+
+/// Where a record goes in the Guru Paramparā: under `parent` (None = first
+/// level), before the disciple `before` (None = last).
+#[derive(Deserialize, Debug, Clone, Copy)]
+pub struct TreePlace {
+    pub parent: Option<i64>,
+    pub before: Option<i64>,
+}
+
+fn tree_parent(tx: &Connection, id: i64) -> rusqlite::Result<Option<Option<i64>>> {
+    tx.query_row("SELECT parent_id FROM person_tree WHERE person_id = ?1", [id], |r| r.get(0))
+        .optional()
+}
+
+fn tree_children(tx: &Connection, parent: Option<i64>) -> rusqlite::Result<Vec<i64>> {
+    let mut st = tx.prepare_cached("SELECT person_id FROM person_tree WHERE parent_id IS ?1 ORDER BY pos, person_id")?;
+    let rows = st.query_map([parent], |r| r.get(0))?;
+    rows.collect()
+}
+
+fn tree_write(tx: &Connection, parent: Option<i64>, ids: &[i64]) -> rusqlite::Result<()> {
+    for (pos, id) in ids.iter().enumerate() {
+        tx.execute(
+            "INSERT INTO person_tree(person_id, parent_id, pos) VALUES(?1, ?2, ?3)
+             ON CONFLICT(person_id) DO UPDATE SET parent_id = excluded.parent_id, pos = excluded.pos",
+            params![id, parent, pos as i64],
+        )?;
+    }
+    Ok(())
+}
+
+/// Takes a record out of the tree; its disciples take its place under its guru.
+fn tree_remove(tx: &Connection, id: i64) -> rusqlite::Result<()> {
+    let Some(parent) = tree_parent(tx, id)? else { return Ok(()) };
+    let kids = tree_children(tx, Some(id))?;
+    let siblings: Vec<i64> = tree_children(tx, parent)?
+        .into_iter()
+        .flat_map(|s| if s == id { kids.clone() } else { vec![s] })
+        .collect();
+    tx.execute("DELETE FROM person_tree WHERE person_id = ?1", [id])?;
+    tree_write(tx, parent, &siblings)
+}
+
+/// Puts a record (with its disciples) in the Guru Paramparā at `place`, or
+/// takes it out (`None`: it goes back to "Other Vaiṣṇavas").
+pub fn move_person(conn: &mut Connection, id: i64, place: Option<TreePlace>) -> Res<()> {
+    let tx = conn.transaction().map_err(e)?;
+    match place {
+        None => tree_remove(&tx, id).map_err(e)?,
+        Some(TreePlace { parent, before }) => {
+            // a guru cannot become the disciple of his own disciple
+            let mut up = parent;
+            while let Some(p) = up {
+                if p == id {
+                    return Err("No se puede poner una ficha dentro de sus propios discípulos.".into());
+                }
+                up = tree_parent(&tx, p).map_err(e)?.flatten();
+            }
+            if let Some(p) = parent {
+                if tree_parent(&tx, p).map_err(e)?.is_none() {
+                    return Err("El guru no está en la Guru Paramparā.".into());
+                }
+            }
+            let mut siblings: Vec<i64> = tree_children(&tx, parent).map_err(e)?.into_iter().filter(|&s| s != id).collect();
+            let at = before.and_then(|b| siblings.iter().position(|&s| s == b)).unwrap_or(siblings.len());
+            siblings.insert(at, id);
+            tree_write(&tx, parent, &siblings).map_err(e)?;
+        }
+    }
+    tx.commit().map_err(e)
+}
+
+/// The usual line of the Gauḍīya Guru Paramparā, starting from Śrī Caitanya
+/// Mahāprabhu: (name, guru). Each name lists the spellings used in the
+/// records; the first one found is taken. Names not found are skipped.
+const PARAMPARA: &[(&[&str], &str)] = &[
+    (&["Caitanya Mahaprabhu", "Lord Caitanya (Krsna Caitanya)"], ""),
+    (&["Nityananda", "Lord Nityananda", "Nityananda Prabhu,Srila"], "Caitanya Mahaprabhu"),
+    (&["Jahnava Mata", "Jahnava Devi"], "Nityananda"),
+    (&["Virabhadra Gosvami", "Virabhadra"], "Nityananda"),
+    (&["Advaita Acarya Prabhu", "Advaita Acarya, Sri"], "Caitanya Mahaprabhu"),
+    (&["Gadadhara Pandit Gosvami"], "Caitanya Mahaprabhu"),
+    (&["Srivasa Pandita"], "Caitanya Mahaprabhu"),
+    (&["Svarupa Damodara", "Swarupa Damodara Goswami"], "Caitanya Mahaprabhu"),
+    (&["Ramananda Raya", "Ramananda Rai"], "Caitanya Mahaprabhu"),
+    (&["Haridasa Thakur"], "Caitanya Mahaprabhu"),
+    (&["Rupa Gosvami", "Rupa Goswami,Srila", "Rupa"], "Caitanya Mahaprabhu"),
+    (&["Sanatana Gosvami", "Sanatana"], "Caitanya Mahaprabhu"),
+    (&["Raghunatha Bhatta Gosvami"], "Caitanya Mahaprabhu"),
+    (&["Raghunatha Dasa Gosvami", "Raghunatha Dasa"], "Rupa Gosvami"),
+    (&["Jiva Gosvami"], "Rupa Gosvami"),
+    (&["Lokanatha Gosvami"], "Caitanya Mahaprabhu"),
+    (&["Krsnadasa Kaviraj Gosvami"], "Raghunatha Dasa Gosvami"),
+    (&["Srinivasa Acarya", "Srinivasa Acarya Thakur"], "Jiva Gosvami"),
+    (&["Syamananda Prabhu"], "Jiva Gosvami"),
+    (&["Narottama Dasa", "Narottama Thakur", "Narottama Dasa Adhikari"], "Krsnadasa Kaviraj Gosvami"),
+    (&["Visvanatha Cakravarti", "Visvanatha Cakravarti Thakura"], "Narottama Dasa"),
+    (&["Baladeva Vidyabhusana"], "Visvanatha Cakravarti"),
+    (&["Jagannatha dasa babaji", "Jagannatha Dasa Babaji Maharaja"], "Baladeva Vidyabhusana"),
+    (&["Bhaktivinoda Thakura", "Bhakti Vinod Thakur", "Kedarnath Datta (Bhaktivinoda Thakur)"], "Jagannatha dasa babaji"),
+    (&["Gaura Kishora dasa babaji", "Gaurakisora Dasa Babaji", "Gaura Kishora babaji"], "Bhaktivinoda Thakura"),
+    (&["Srila Bhakti Siddhanta Sarasvati Gosvami"], "Gaura Kishora dasa babaji"),
+    (&["A.C. Bhaktivedanta Swami Prabhupada"], "Srila Bhakti Siddhanta Sarasvati Gosvami"),
+    (&["Bhakti Rakshak Shridhar", "Rakshaka Sridhara Maharaja"], "Srila Bhakti Siddhanta Sarasvati Gosvami"),
+    (&["Bhakti Pragyana Keshava", "Prajnana Kesava Maharaja"], "Srila Bhakti Siddhanta Sarasvati Gosvami"),
+    (&["Bhakti Vedanta Narayana", "Narayana Gosvami Maharaja,Srila Bhaktivedanta"], "Bhakti Pragyana Keshava"),
+    (&["Bhakti Vedanta Vamana"], "Bhakti Pragyana Keshava"),
+    (&["Bhakti Pramod Puri"], "Srila Bhakti Siddhanta Sarasvati Gosvami"),
+    (&["Bhakti Dayita Madhava"], "Srila Bhakti Siddhanta Sarasvati Gosvami"),
+    (&["Bhakti Hridoy Bon"], "Srila Bhakti Siddhanta Sarasvati Gosvami"),
+];
+
+/// Fills the Guru Paramparā once with the usual line (only if it is empty).
+pub fn seed_parampara(conn: &mut Connection) -> Res<usize> {
+    let tx = conn.transaction().map_err(e)?;
+    let used: i64 = tx.query_row("SELECT COUNT(*) FROM person_tree", [], |r| r.get(0)).map_err(e)?;
+    if used > 0 {
+        return Ok(0);
+    }
+    let mut found: Vec<(&str, i64)> = Vec::new();
+    for (names, guru) in PARAMPARA {
+        let id = names.iter().find_map(|n| {
+            tx.query_row("SELECT id FROM persons WHERE name = ?1 COLLATE NOCASE ORDER BY id LIMIT 1", [n], |r| r.get::<_, i64>(0))
+                .ok()
+        });
+        let Some(id) = id else { continue };
+        if found.iter().any(|&(_, f)| f == id) {
+            continue;
+        }
+        // the guru may be missing: then the line goes on from his own guru
+        let mut g = *guru;
+        let parent = loop {
+            if g.is_empty() {
+                break None;
+            }
+            if let Some(&(_, pid)) = found.iter().find(|(n, _)| *n == g) {
+                break Some(pid);
+            }
+            g = PARAMPARA.iter().find(|(ns, _)| ns[0] == g).map(|(_, up)| *up).unwrap_or("");
+        };
+        let mut kids = tree_children(&tx, parent).map_err(e)?;
+        kids.push(id);
+        tree_write(&tx, parent, &kids).map_err(e)?;
+        found.push((names[0], id));
+    }
+    tx.commit().map_err(e)?;
+    Ok(found.len())
 }
 
 /// Finds the person whose name (or alternative name) has the same key.
@@ -665,6 +824,43 @@ pub fn find_person(tx: &Connection, key: &str) -> rusqlite::Result<Option<i64>> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parampara() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::db::init(&conn).unwrap();
+        let tx = conn.transaction().unwrap();
+        let [cai, rupa, jiva, sanatana, x] = ["Caitanya Mahaprabhu", "Rupa", "Jiva Gosvami", "Sanatana Gosvami", "Zz Prueba"]
+            .map(|n| create_person(&tx, n).unwrap());
+        tx.commit().unwrap();
+        assert_eq!(seed_parampara(&mut conn).unwrap(), 4);
+        assert_eq!(seed_parampara(&mut conn).unwrap(), 0, "only once");
+        let kids = |c: &Connection, p: Option<i64>| tree_children(c, p).unwrap();
+        assert_eq!(kids(&conn, None), vec![cai]);
+        assert_eq!(kids(&conn, Some(cai)), vec![rupa, sanatana]);
+        assert_eq!(kids(&conn, Some(rupa)), vec![jiva]);
+        let list = crate::search::list_persons(&conn).unwrap();
+        assert_eq!(list.iter().filter(|p| p.tree.is_some()).count(), 4);
+        assert_eq!(list.iter().find(|p| p.id == jiva).unwrap().tree.as_ref().unwrap().parent, Some(rupa));
+        // reorder, add, and refuse a guru under his own disciple
+        move_person(&mut conn, sanatana, Some(TreePlace { parent: Some(cai), before: Some(rupa) })).unwrap();
+        assert_eq!(kids(&conn, Some(cai)), vec![sanatana, rupa]);
+        move_person(&mut conn, x, Some(TreePlace { parent: Some(jiva), before: None })).unwrap();
+        assert!(move_person(&mut conn, rupa, Some(TreePlace { parent: Some(x), before: None })).is_err());
+        // taking Rupa out: his disciples take his place
+        move_person(&mut conn, rupa, None).unwrap();
+        assert_eq!(kids(&conn, Some(cai)), vec![sanatana, jiva]);
+        assert_eq!(kids(&conn, Some(jiva)), vec![x]);
+        // merging Jiva (in the tree) into Rupa (not in it): Rupa takes his place
+        merge_persons(&mut conn, rupa, &[jiva]).unwrap();
+        assert_eq!(kids(&conn, Some(cai)), vec![sanatana, rupa]);
+        assert_eq!(kids(&conn, Some(rupa)), vec![x]);
+        // merging a guru into his disciple: no loops
+        merge_persons(&mut conn, x, &[rupa]).unwrap();
+        assert_eq!(kids(&conn, Some(cai)), vec![sanatana, x]);
+        delete_person(&mut conn, cai).unwrap();
+        assert_eq!(kids(&conn, None), vec![sanatana, x]);
+    }
 
     #[test]
     fn keys() {

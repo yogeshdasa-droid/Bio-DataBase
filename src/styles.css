@@ -2266,6 +2266,98 @@ button.logo {
   font-size: 12.8px;
 }
 
+/* ---- persons: Guru Paramparā (tree) and Other Vaiṣṇavas */
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 2px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.group-head:hover {
+  background: var(--hover);
+}
+.group-head .name {
+  flex: 1;
+}
+.group-head .count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.group-head svg {
+  color: var(--accent);
+}
+.tree-row .caret-space {
+  width: 13px;
+  flex-shrink: 0;
+}
+.parampara .tree-row.person {
+  gap: 4px;
+}
+.side-empty.small {
+  padding: 14px 10px;
+  font-size: 12px;
+}
+body.dragging-person,
+body.dragging-person * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+.tree-row.dragged {
+  opacity: 0.45;
+}
+.tree-row.drop-inside {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.tree-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+  border-radius: 0;
+}
+.tree-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+  border-radius: 0;
+}
+.group-head.drop-hot,
+.side-empty.drop-hot,
+.drop-zone-hot {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  border-radius: 8px;
+}
+.drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 280px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  font-size: 12.5px;
+}
+.drag-ghost .drag-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drag-ghost .drag-where {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--accent-text);
+}
+
 /* ---- chips that open a person */
 .person-chip,
 .name-link {
@@ -2765,4 +2857,233 @@ button.logo {
 .merge-list em {
   display: inline !important;
   margin-left: 8px;
+}
+
+/* ================================================================ skin: VS Code
+   The app dressed like Visual Studio Code (Dark Modern / Light Modern):
+   flat colours, Segoe UI, square corners, blue accent. Only looks change. */
+:root[data-skin="vscode"] {
+  --bg: #ffffff;
+  --bg-grad: none;
+  --panel: #f8f8f8;
+  --panel-solid: #f8f8f8;
+  --surface: #ffffff;
+  --sunken: #f3f3f3;
+  --border: #e5e5e5;
+  --border-strong: #cecece;
+  --text: #3b3b3b;
+  --text-2: #3b3b3b;
+  --muted: #767676;
+  --accent: #005fb8;
+  --accent-2: #0258a8;
+  --accent-grad: #005fb8;
+  --accent-soft: #e4effa;
+  --accent-text: #005fb8;
+  --ring: rgba(0, 95, 184, 0.25);
+  --mark: rgba(234, 92, 0, 0.22);
+  --mark-text: inherit;
+  --mark-current: #f8c9a0;
+  --hover: #f0f0f0;
+  --selected: #e4e6f1;
+  --shadow-sm: none;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.26);
+  --radius: 4px;
+  --font-ui: "Segoe WPC", "Segoe UI", system-ui, sans-serif;
+}
+:root[data-skin="vscode"][data-theme="dark"] {
+  --bg: #1f1f1f;
+  --panel: #181818;
+  --panel-solid: #202020;
+  --surface: #1f1f1f;
+  --sunken: #181818;
+  --border: #2b2b2b;
+  --border-strong: #3c3c3c;
+  --text: #cccccc;
+  --text-2: #cccccc;
+  --muted: #9d9d9d;
+  --accent: #0078d4;
+  --accent-2: #026ec1;
+  --accent-grad: #0078d4;
+  --accent-soft: rgba(0, 120, 212, 0.18);
+  --accent-text: #4daafc;
+  --ring: rgba(0, 120, 212, 0.4);
+  --mark: rgba(234, 92, 0, 0.33);
+  --mark-text: inherit;
+  --mark-current: rgba(158, 106, 3, 0.8);
+  --hover: #2a2d2e;
+  --selected: #04395e;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+  --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.6);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="vscode"]:not([data-theme="light"]) {
+    --bg: #1f1f1f;
+    --panel: #181818;
+    --panel-solid: #202020;
+    --surface: #1f1f1f;
+    --sunken: #181818;
+    --border: #2b2b2b;
+    --border-strong: #3c3c3c;
+    --text: #cccccc;
+    --text-2: #cccccc;
+    --muted: #9d9d9d;
+    --accent: #0078d4;
+    --accent-2: #026ec1;
+    --accent-grad: #0078d4;
+    --accent-soft: rgba(0, 120, 212, 0.18);
+    --accent-text: #4daafc;
+    --ring: rgba(0, 120, 212, 0.4);
+    --mark: rgba(234, 92, 0, 0.33);
+    --mark-text: inherit;
+    --mark-current: rgba(158, 106, 3, 0.8);
+    --hover: #2a2d2e;
+    --selected: #04395e;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+    --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.6);
+  }
+}
+
+:root[data-skin="vscode"] body {
+  font-size: 13px;
+  font-feature-settings: normal;
+}
+/* square corners everywhere, except the things that are round on purpose */
+:root[data-skin="vscode"] *:not(.switch):not(.spinner):not(.dot):not(.scope button):not(.hit-pill button):not(.cover-remove) {
+  border-radius: 3px;
+}
+:root[data-skin="vscode"] .count,
+:root[data-skin="vscode"] .pill {
+  border-radius: 9px;
+}
+:root[data-skin="vscode"] * {
+  backdrop-filter: none !important;
+}
+/* the big titles in the interface use the interface letter, not Literata
+   (the reading style chosen in Settings still applies to the texts) */
+:root[data-skin="vscode"] :is(.logo, .hero h1, .reader-title h1, .person-title h1, .aa, .facts dd.notes) {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+}
+:root[data-skin="vscode"] .logo {
+  box-shadow: none;
+}
+
+/* title bar and search box like the VS Code command center */
+:root[data-skin="vscode"] .topbar {
+  padding: 5px 10px;
+  gap: 10px;
+}
+:root[data-skin="vscode"] .searchbox {
+  height: 30px;
+  border-radius: 6px;
+  background: var(--sunken);
+  border-color: var(--border-strong);
+  box-shadow: none;
+}
+:root[data-skin="vscode"] .searchbox:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+:root[data-skin="vscode"] .searchbox input {
+  font-size: 13px;
+}
+:root[data-skin="vscode"] input:not([type="checkbox"]):not([type="radio"]),
+:root[data-skin="vscode"] textarea,
+:root[data-skin="vscode"] select {
+  box-shadow: none;
+}
+
+/* side bar like the Explorer: flat tabs with a line under the active one */
+:root[data-skin="vscode"] .sidebar {
+  border-right: 1px solid var(--border);
+}
+:root[data-skin="vscode"] .tabs {
+  margin: 0 0 4px;
+  padding: 0 6px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+}
+:root[data-skin="vscode"] .tabs button {
+  padding: 9px 4px 8px;
+  border-radius: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+:root[data-skin="vscode"] .tabs button.active {
+  color: var(--text);
+  box-shadow: inset 0 -1px 0 var(--accent);
+}
+:root[data-skin="vscode"] .tab-ink {
+  display: none;
+}
+:root[data-skin="vscode"] .side-scroll {
+  padding: 2px 0 16px;
+}
+:root[data-skin="vscode"] .tree-row {
+  padding: 2px 8px;
+  margin: 0;
+  border-radius: 0;
+  line-height: 18px;
+  color: var(--text);
+}
+:root[data-skin="vscode"] .tree-row.active {
+  background: var(--selected);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+:root[data-skin="vscode"] .tree-row.person {
+  font-size: 13px;
+}
+:root[data-skin="vscode"] .group-head {
+  margin: 0;
+  padding: 4px 6px;
+  border-radius: 0;
+  font-size: 11px;
+}
+:root[data-skin="vscode"] .group-head svg {
+  color: var(--text);
+}
+:root[data-skin="vscode"] .letter {
+  color: var(--muted);
+}
+:root[data-skin="vscode"] .person-filter {
+  margin: 4px 8px 6px;
+}
+
+/* status bar, flat like VS Code Modern */
+:root[data-skin="vscode"] .statusbar {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+/* buttons: solid blue for the main ones, flat for the rest */
+:root[data-skin="vscode"] button {
+  box-shadow: none;
+}
+:root[data-skin="vscode"] .ctx-menu {
+  padding: 4px;
+  border-radius: 5px;
+}
+:root[data-skin="vscode"] .btn {
+  height: 28px;
+  padding: 0 12px;
+  font-weight: 400;
+  box-shadow: none;
+}
+:root[data-skin="vscode"] .btn:hover:not(:disabled) {
+  filter: none;
+  background: var(--accent-2);
+  box-shadow: none;
+}
+:root[data-skin="vscode"] .btn.ghost {
+  background: transparent;
+}
+:root[data-skin="vscode"] .btn.ghost:hover:not(:disabled) {
+  background: var(--hover);
+}
+:root[data-skin="vscode"] .hero-icon {
+  box-shadow: none;
 }

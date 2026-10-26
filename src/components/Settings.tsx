@@ -7,6 +7,7 @@ import { Kbd, Modal } from "./ui";
 import type { ReaderStyle } from "./Reader";
 
 export type Theme = "system" | "light" | "dark";
+export type Skin = "vscode" | "classic";
 export type SettingsTab = "general" | "sources" | "trash" | "help";
 
 interface Props {
@@ -14,10 +15,12 @@ interface Props {
   lang: Lang;
   status: Status | null;
   theme: Theme;
+  skin: Skin;
   readerStyle: ReaderStyle;
   initialTab: SettingsTab;
   onLang: (l: Lang) => void;
   onTheme: (t: Theme) => void;
+  onSkin: (s: Skin) => void;
   onReaderStyle: (s: ReaderStyle) => void;
   onClose: () => void;
   onToast: (msg: string) => void;
@@ -88,6 +91,14 @@ export function Settings(p: Props) {
                 {(["system", "light", "dark"] as Theme[]).map((th) => (
                   <button key={th} className={p.theme === th ? "on" : ""} onClick={() => p.onTheme(th)}>
                     {th === "system" ? t.themeSystem : th === "light" ? t.themeLight : t.themeDark}
+                  </button>
+                ))}
+              </div>
+              <h3>{t.skin}</h3>
+              <div className="seg">
+                {(["vscode", "classic"] as Skin[]).map((s) => (
+                  <button key={s} className={p.skin === s ? "on" : ""} onClick={() => p.onSkin(s)}>
+                    {s === "vscode" ? t.skinVscode : t.skinClassic}
                   </button>
                 ))}
               </div>

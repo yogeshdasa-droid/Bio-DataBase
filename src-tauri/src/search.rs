@@ -487,6 +487,14 @@ pub struct PersonListItem {
     pub cover_doc: Option<i64>,
     /// a picture chosen for the record (served at /photo/<id>)
     pub has_photo: bool,
+    /// place in the Guru Paramparā: None = not in it ("Other Vaiṣṇavas")
+    pub tree: Option<TreeNode>,
+}
+
+#[derive(Serialize)]
+pub struct TreeNode {
+    pub parent: Option<i64>,
+    pub pos: i64,
 }
 
 pub fn list_persons(conn: &Connection) -> rusqlite::Result<Vec<PersonListItem>> {
@@ -495,11 +503,14 @@ pub fn list_persons(conn: &Connection) -> rusqlite::Result<Vec<PersonListItem>> 
                 (SELECT COUNT(*) FROM docs d WHERE d.person_id = p.id AND d.deleted IS NULL),
                 (SELECT f.doc_id FROM files f JOIN docs d ON d.id = f.doc_id
                  WHERE d.person_id = p.id AND d.deleted IS NULL AND f.role = 'cover' ORDER BY d.title LIMIT 1),
-                EXISTS(SELECT 1 FROM person_photos ph WHERE ph.person_id = p.id)
-         FROM persons p ORDER BY p.name COLLATE NOCASE",
+                EXISTS(SELECT 1 FROM person_photos ph WHERE ph.person_id = p.id),
+                t.person_id IS NOT NULL, t.parent_id, t.pos
+         FROM persons p LEFT JOIN person_tree t ON t.person_id = p.id
+         ORDER BY p.name COLLATE NOCASE",
     )?;
     let rows = st.query_map([], |r| {
-        Ok(PersonListItem { id: r.get(0)?, name: r.get(1)?, aka: r.get(2)?, docs: r.get(3)?, cover_doc: r.get(4)?, has_photo: r.get(5)? })
+        let tree = if r.get::<_, bool>(6)? { Some(TreeNode { parent: r.get(7)?, pos: r.get(8)? }) } else { None };
+        Ok(PersonListItem { id: r.get(0)?, name: r.get(1)?, aka: r.get(2)?, docs: r.get(3)?, cover_doc: r.get(4)?, has_photo: r.get(5)?, tree })
     })?;
     rows.collect()
 }

@@ -219,6 +219,11 @@ async fn merge_persons(state: State<'_, AppState>, into: i64, from: Vec<i64>) ->
 }
 
 #[tauri::command]
+async fn move_person(state: State<'_, AppState>, id: i64, place: Option<store::TreePlace>) -> CmdResult<()> {
+    store::move_person(&mut state.conn.lock().unwrap(), id, place)
+}
+
+#[tauri::command]
 async fn set_person_photo(state: State<'_, AppState>, id: i64, path: String) -> CmdResult<()> {
     store::set_person_photo(&state.conn.lock().unwrap(), id, std::path::Path::new(&path))
 }
@@ -431,6 +436,12 @@ fn main() {
                 store::clean_callouts(&mut conn)?;
                 db::set_meta(&conn, "callouts_cleaned", "1")?;
             }
+            if startup_error.is_none() && !first_run && db::get_meta(&conn, "parampara_seeded")?.is_none() {
+                // One-time: the Guru Paramparā starts with the usual line.
+                if store::seed_parampara(&mut conn).is_ok() {
+                    db::set_meta(&conn, "parampara_seeded", "1")?;
+                }
+            }
             app.manage(AppState {
                 db_path,
                 conn: Mutex::new(conn),
@@ -475,6 +486,7 @@ fn main() {
             update_person,
             delete_person,
             merge_persons,
+            move_person,
             set_person_photo,
             remove_person_photo,
             create_doc,

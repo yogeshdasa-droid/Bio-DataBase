@@ -121,7 +121,12 @@ export interface PersonListItem {
   docs: number;
   coverDoc: number | null;
   hasPhoto: boolean;
+  /** place in the Guru Paramparā; null = "Other Vaiṣṇavas" */
+  tree: { parent: number | null; pos: number } | null;
 }
+
+/** Where a record goes in the Guru Paramparā (null = take it out). */
+export type TreePlace = { parent: number | null; before: number | null } | null;
 
 export interface PersonDoc {
   id: number;
@@ -216,6 +221,7 @@ export const api = {
   updatePerson: (id: number, fields: PersonFields) => invoke<void>("update_person", { id, fields }),
   deletePerson: (id: number) => invoke<void>("delete_person", { id }),
   mergePersons: (into: number, from: number[]) => invoke<void>("merge_persons", { into, from }),
+  movePerson: (id: number, place: TreePlace) => invoke<void>("move_person", { id, place }),
   setPersonPhoto: (id: number, path: string) => invoke<void>("set_person_photo", { id, path }),
   removePersonPhoto: (id: number) => invoke<void>("remove_person_photo", { id }),
 

@@ -91,6 +91,11 @@
         var dark = theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
         if (dark) document.documentElement.classList.add("dark");
         if (theme !== "system") document.documentElement.setAttribute("data-theme", theme);
+        var skin = "vscode";
+        try {
+          skin = JSON.parse(localStorage.getItem("bio.skin") || "\"vscode\"");
+        } catch (e) {}
+        document.documentElement.setAttribute("data-skin", skin);
         requestAnimationFrame(function () {
           requestAnimationFrame(function () {
             var t = window.__TAURI_INTERNALS__;

@@ -17,6 +17,8 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  ListTree,
+  ListX,
   Pencil,
   Quote,
   Scissors,
@@ -48,6 +50,7 @@ import {
   SectionText,
   Sort,
   Status,
+  TreePlace,
 } from "./api";
 import { dicts, Lang } from "./i18n";
 import { buildNameIndex } from "./personLinks";
@@ -56,7 +59,7 @@ import { Home, RecentDoc } from "./components/Home";
 import { EMPTY_FILTERS, Filters, hasFilter, Results } from "./components/Results";
 import { Reader, ReaderStyle, ReaderTarget } from "./components/Reader";
 import { PersonView } from "./components/PersonView";
-import { Settings, SettingsTab, Theme } from "./components/Settings";
+import { Settings, SettingsTab, Skin, Theme } from "./components/Settings";
 import { SideTab, Sidebar } from "./components/Sidebar";
 import { Kbd, Splitter } from "./components/ui";
 
@@ -96,6 +99,7 @@ type Dialog =
 export default function App() {
   const [lang, setLang] = usePersisted<Lang>("language", "es");
   const [theme, setTheme] = usePersisted<Theme>("theme", "system");
+  const [skin, setSkin] = usePersisted<Skin>("skin", "vscode");
   const [readerStyle, setReaderStyle] = usePersisted<ReaderStyle>("readerStyle", "editor");
   const [fontSize, setFontSize] = usePersisted("fontSize", 18);
   const [titlesOnly, setTitlesOnly] = usePersisted("titlesOnly", false);
@@ -216,8 +220,9 @@ export default function App() {
     const root = document.documentElement;
     if (theme === "system") root.removeAttribute("data-theme");
     else root.setAttribute("data-theme", theme);
+    root.dataset.skin = skin;
     root.lang = lang;
-  }, [theme, lang]);
+  }, [theme, skin, lang]);
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -480,6 +485,11 @@ export default function App() {
       })
       .catch(fail);
   };
+  const movePerson = (id: number, place: TreePlace) =>
+    api
+      .movePerson(id, place)
+      .then(() => api.listPersons().then(setPersons))
+      .catch(fail);
   const findMentions = (p: Person) => {
     setFilters(EMPTY_FILTERS);
     setTitlesOnly(false);
@@ -620,6 +630,9 @@ export default function App() {
           { label: t.findMentions, icon: Search, onClick: withPerson(id, findMentions) },
           { label: t.mergePersons, icon: GitMerge, onClick: withPerson(id, (person) => setDialog({ kind: "merge", person, suggested: [] })) },
           { label: t.importFiles, icon: Upload, onClick: () => p && pickImport({ id: p.id, name: p.name }) },
+          p?.tree
+            ? { label: t.removeFromParampara, icon: ListX, onClick: () => movePerson(id, null) }
+            : { label: t.addToParampara, icon: ListTree, onClick: () => movePerson(id, { parent: null, before: null }) },
           "sep",
           { label: t.deletePerson, icon: Trash2, danger: true, onClick: withPerson(id, deletePerson) },
         ],
@@ -813,6 +826,7 @@ export default function App() {
               activePersonId={personId}
               onPerson={openPerson}
               onNewPerson={() => setDialog({ kind: "person", person: null })}
+              onMovePerson={movePerson}
               docs={docs}
               activeDir={filters.scope?.dir ?? null}
               activeDocId={target?.docId ?? null}
@@ -969,10 +983,12 @@ export default function App() {
           lang={lang}
           status={status}
           theme={theme}
+          skin={skin}
           readerStyle={readerStyle}
           initialTab={dialog.tab}
           onLang={setLang}
           onTheme={setTheme}
+          onSkin={setSkin}
           onReaderStyle={setReaderStyle}
           onClose={() => setDialog(null)}
           onToast={showToast}

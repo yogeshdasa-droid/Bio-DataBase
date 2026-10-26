@@ -8,7 +8,8 @@ use std::path::Path;
 /// Format of the data tables. A newer value means a newer program wrote the
 /// file: it is refused instead of risking the user's data.
 /// 2: + person_photos (created empty on open; nothing else changes).
-pub const DATA_VERSION: u32 = 2;
+/// 3: + person_tree (the Guru Paramparā; created empty on open).
+pub const DATA_VERSION: u32 = 3;
 /// Bump when the folding rules or the FTS layout change: the search tables
 /// are rebuilt from `sections` / `docs` / `persons` (no data is lost).
 pub const FTS_VERSION: &str = "1";
@@ -94,6 +95,15 @@ CREATE TABLE IF NOT EXISTS person_photos(
     mime TEXT NOT NULL,
     data BLOB NOT NULL
 );
+
+-- the Guru Paramparā (format 3): records in it form a tree of guru → disciples;
+-- records not in it are listed under "Other Vaiṣṇavas"
+CREATE TABLE IF NOT EXISTS person_tree(
+    person_id INTEGER PRIMARY KEY,
+    parent_id INTEGER,              -- NULL = first level
+    pos INTEGER NOT NULL DEFAULT 0  -- order among the disciples of the same guru
+);
+CREATE INDEX IF NOT EXISTS person_tree_parent ON person_tree(parent_id, pos);
 "#;
 
 const FTS_SCHEMA: &str = r#"

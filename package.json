@@ -1,7 +1,7 @@
 {
   "name": "bio-data",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bio-Data: biografias vaisnavas autosuficientes",
   "type": "module",
   "scripts": {

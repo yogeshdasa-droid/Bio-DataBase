@@ -1,6 +1,6 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { BookMarked, ChevronRight, FileText, Folder, FolderOpen, History, Library as LibIcon, Search, Star, Trash2, Upload, UserPlus, Users, X } from "lucide-react";
-import { api, Bookmark, DocListItem, hueOf, PersonListItem } from "../api";
+import { api, Bookmark, DocListItem, hueOf, PersonListItem, TreePlace } from "../api";
 import { foldWord } from "../fold";
 import { Lang, T } from "../i18n";
 
@@ -110,22 +110,63 @@ const Tree = memo(function Tree(p: TreeProps) {
 
 // ---------------------------------------------------------------- persons
 
+type Drop = { kind: "inside" | "before" | "after"; target: number } | { kind: "root" } | { kind: "out" };
+
+interface Drag {
+  id: number;
+  name: string;
+  x: number;
+  y: number;
+  drop: Drop | null;
+}
+
+function useStoredSet<K>(key: string) {
+  const [s, setS] = useState<Set<K>>(() => {
+    try {
+      return new Set<K>(JSON.parse(localStorage.getItem("bio." + key) ?? "[]"));
+    } catch {
+      return new Set<K>();
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("bio." + key, JSON.stringify([...s]));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [key, s]);
+  const toggle = (k: K, on?: boolean) =>
+    setS((old) => {
+      const n = new Set(old);
+      if (on ?? !n.has(k)) n.add(k);
+      else n.delete(k);
+      return n;
+    });
+  return [s, toggle] as const;
+}
+
 function PersonList({
   t,
   lang,
   persons,
   activeId,
   onPerson,
+  onMove,
 }: {
   t: T;
   lang: Lang;
   persons: PersonListItem[];
   activeId: number | null;
   onPerson: (id: number) => void;
+  onMove: (id: number, place: TreePlace) => void;
 }) {
   const [filter, setFilter] = useState("");
   const [fieldHits, setFieldHits] = useState<number[]>([]);
   const folded = useMemo(() => persons.map((p) => ` ${foldName(`${p.name} ${p.aka}`)}`), [persons]);
+  const [closedGroups, toggleGroup] = useStoredSet<string>("personGroups");
+  const [closed, toggleNode] = useStoredSet<number>("treeClosed");
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const dragged = useRef(false);
 
   // Names are filtered here; the records' other fields by the database.
   useEffect(() => {
@@ -141,6 +182,137 @@ function PersonList({
     return persons.filter((p, i) => words.every((w) => folded[i].includes(` ${w}`)) || extra.has(p.id));
   }, [filter, persons, folded, fieldHits]);
 
+  // the Guru Paramparā: the disciples of each record, in their order
+  const { kids, parentOf, others } = useMemo(() => {
+    const ids = new Set(persons.filter((p) => p.tree).map((p) => p.id));
+    const kids = new Map<number | null, PersonListItem[]>();
+    const parentOf = new Map<number, number | null>();
+    for (const p of persons) {
+      if (!p.tree) continue;
+      const parent = p.tree.parent !== null && ids.has(p.tree.parent) ? p.tree.parent : null;
+      parentOf.set(p.id, parent);
+      kids.set(parent, [...(kids.get(parent) ?? []), p]);
+    }
+    for (const list of kids.values()) list.sort((a, b) => a.tree!.pos - b.tree!.pos);
+    return { kids, parentOf, others: persons.filter((p) => !p.tree) };
+  }, [persons]);
+
+  const rows = useMemo(() => {
+    const out: { p: PersonListItem; depth: number; hasKids: boolean }[] = [];
+    const walk = (parent: number | null, depth: number) => {
+      for (const p of kids.get(parent) ?? []) {
+        const hasKids = (kids.get(p.id)?.length ?? 0) > 0;
+        out.push({ p, depth, hasKids });
+        if (hasKids && !closed.has(p.id)) walk(p.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    return out;
+  }, [kids, closed]);
+
+  const isWithin = (id: number, ancestor: number) => {
+    for (let x: number | null | undefined = id; x != null; x = parentOf.get(x)) if (x === ancestor) return true;
+    return false;
+  };
+
+  // ---- drag and drop, done with the mouse: the window's own drag and drop
+  // is taken by the import of files
+  const dropAt = (x: number, y: number, id: number): Drop | null => {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-drop]");
+    if (!el) return null;
+    const kind = el.dataset.drop;
+    if (kind === "root") return { kind: "root" };
+    if (kind === "out") return parentOf.has(id) ? { kind: "out" } : null;
+    const target = Number(el.dataset.id);
+    if (isWithin(target, id)) return null;
+    const r = el.getBoundingClientRect();
+    const f = (y - r.top) / r.height;
+    return { kind: f < 0.28 ? "before" : f > 0.72 ? "after" : "inside", target };
+  };
+
+  const startDrag = (e: React.MouseEvent, p: PersonListItem) => {
+    if (e.button !== 0 || filter) return;
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const scroller = (e.currentTarget as HTMLElement).closest(".side-scroll");
+    let current: Drag | null = null;
+    let last = { x: x0, y: y0 };
+    // near the top or bottom edge the list scrolls by itself
+    const scroll = window.setInterval(() => {
+      if (!current || !scroller) return;
+      const r = scroller.getBoundingClientRect();
+      const dy = last.y < r.top + 36 ? -14 : last.y > r.bottom - 36 ? 14 : 0;
+      if (dy) scroller.scrollBy(0, dy);
+    }, 30);
+    const move = (ev: MouseEvent) => {
+      last = { x: ev.clientX, y: ev.clientY };
+      if (!current && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      current = { id: p.id, name: p.name, x: ev.clientX, y: ev.clientY, drop: dropAt(ev.clientX, ev.clientY, p.id) };
+      document.body.classList.add("dragging-person");
+      setDrag(current);
+    };
+    const end = (ev: MouseEvent | KeyboardEvent) => {
+      if (ev instanceof KeyboardEvent && ev.key !== "Escape") return;
+      window.clearInterval(scroll);
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", end);
+      window.removeEventListener("keydown", end);
+      document.body.classList.remove("dragging-person");
+      setDrag(null);
+      if (!current) return;
+      dragged.current = true; // the click that ends a drag does not open the record
+      window.setTimeout(() => (dragged.current = false), 0);
+      const d = current.drop;
+      if (ev instanceof KeyboardEvent || !d) return;
+      if (d.kind === "out") return onMove(p.id, null);
+      if (d.kind === "root") return onMove(p.id, { parent: null, before: null });
+      if (d.kind === "inside") {
+        toggleNode(d.target, false);
+        return onMove(p.id, { parent: d.target, before: null });
+      }
+      const parent = parentOf.get(d.target) ?? null;
+      const sibs = (kids.get(parent) ?? []).map((s) => s.id).filter((s) => s !== p.id);
+      const at = sibs.indexOf(d.target) + (d.kind === "after" ? 1 : 0);
+      onMove(p.id, { parent, before: sibs[at] ?? null });
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+    window.addEventListener("keydown", end);
+  };
+
+  const dropLabel = (d: Drop) => {
+    if (d.kind === "root") return t.dropRoot;
+    if (d.kind === "out") return t.dropOut;
+    const n = persons.find((x) => x.id === d.target)?.name ?? "";
+    return d.kind === "inside" ? t.dropInside(n) : d.kind === "before" ? t.dropBefore(n) : t.dropAfter(n);
+  };
+  const dropClass = (id: number) => (drag?.drop && "target" in drag.drop && drag.drop.target === id ? ` drop-${drag.drop.kind}` : "");
+
+  const personRow = (p: PersonListItem, inTree = false, caret?: React.ReactNode, depth = 0) => (
+    <div
+      data-ctx="person"
+      data-id={p.id}
+      data-drop={inTree ? "node" : "out"}
+      className={`tree-row person${activeId === p.id ? " active" : ""}${drag?.id === p.id ? " dragged" : ""}${inTree ? dropClass(p.id) : ""}`}
+      style={inTree ? { paddingLeft: 4 + depth * 14 } : undefined}
+      onMouseDown={(e) => startDrag(e, p)}
+      onClick={() => !dragged.current && onPerson(p.id)}
+      title={p.aka ? `${p.name} · ${p.aka}` : p.name}
+    >
+      {caret}
+      <span className="name">{p.name}</span>
+      {p.docs > 1 && <span className="count">{p.docs.toLocaleString(lang)}</span>}
+    </div>
+  );
+
+  const groupHead = (key: string, label: string, n: number, drop: "root" | "out", hint?: string) => (
+    <div data-drop={drop} className={`group-head${drag?.drop?.kind === drop ? " drop-hot" : ""}`} title={hint} onClick={() => toggleGroup(key)}>
+      <ChevronRight size={14} className={`caret ${closedGroups.has(key) ? "" : "open"}`} />
+      <span className="name">{label}</span>
+      <span className="count">{n.toLocaleString(lang)}</span>
+    </div>
+  );
+
   let letter = "";
   return (
     <div className="fade-in">
@@ -153,26 +325,70 @@ function PersonList({
           </button>
         )}
       </div>
-      {shown.length === 0 && <div className="side-empty">{t.noPersons}</div>}
-      {shown.map((p) => {
-        const first = foldWord(p.name.trim()[0] ?? "#").toUpperCase() || "#";
-        const header = first !== letter && !filter ? (letter = first) : null;
-        return (
-          <div key={p.id}>
-            {header && <div className="letter">{header}</div>}
-            <div
-              data-ctx="person"
-              data-id={p.id}
-              className={`tree-row person ${activeId === p.id ? "active" : ""}`}
-              onClick={() => onPerson(p.id)}
-              title={p.aka ? `${p.name} · ${p.aka}` : p.name}
-            >
-              <span className="name">{p.name}</span>
-              {p.docs > 1 && <span className="count">{p.docs.toLocaleString(lang)}</span>}
+      {filter ? (
+        <>
+          {shown.length === 0 && <div className="side-empty">{t.noPersons}</div>}
+          {shown.map((p) => (
+            <div key={p.id}>{personRow(p)}</div>
+          ))}
+        </>
+      ) : (
+        <>
+          {groupHead("tree", t.parampara, parentOf.size, "root", t.paramparaHint)}
+          {!closedGroups.has("tree") && (
+            <div className="parampara">
+              {rows.map(({ p, depth, hasKids }) => (
+                <div key={p.id}>
+                  {personRow(
+                    p,
+                    true,
+                    hasKids ? (
+                      <ChevronRight
+                        size={13}
+                        className={`caret ${closed.has(p.id) ? "" : "open"}`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleNode(p.id);
+                        }}
+                      />
+                    ) : (
+                      <span className="caret-space" />
+                    ),
+                    depth,
+                  )}
+                </div>
+              ))}
+              {rows.length === 0 && (
+                <div data-drop="root" className={`side-empty small${drag?.drop?.kind === "root" ? " drop-hot" : ""}`}>
+                  {t.paramparaEmpty}
+                </div>
+              )}
             </div>
-          </div>
-        );
-      })}
+          )}
+          {groupHead("other", t.otherVaisnavas, others.length, "out")}
+          {!closedGroups.has("other") && (
+            <div data-drop="out" className={drag?.drop?.kind === "out" ? "drop-zone-hot" : ""}>
+              {others.map((p) => {
+                const first = foldWord(p.name.trim()[0] ?? "#").toUpperCase() || "#";
+                const header = first !== letter ? (letter = first) : null;
+                return (
+                  <div key={p.id}>
+                    {header && <div className="letter">{header}</div>}
+                    {personRow(p)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+      {drag && (
+        <div className="drag-ghost" style={{ left: drag.x + 14, top: drag.y + 10 }}>
+          <div className="drag-name">{drag.name}</div>
+          {drag.drop && <div className="drag-where">{dropLabel(drag.drop)}</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -188,6 +404,7 @@ interface Props {
   activePersonId: number | null;
   onPerson: (id: number) => void;
   onNewPerson: () => void;
+  onMovePerson: (id: number, place: TreePlace) => void;
   docs: DocListItem[];
   activeDir: string | null;
   activeDocId: number | null;
@@ -233,7 +450,7 @@ export function Sidebar(p: Props) {
         ))}      </nav>
 
       <div className="side-scroll" key={p.tab}>
-        {p.tab === "persons" && <PersonList t={t} lang={p.lang} persons={p.persons} activeId={p.activePersonId} onPerson={p.onPerson} />}
+        {p.tab === "persons" && <PersonList t={t} lang={p.lang} persons={p.persons} activeId={p.activePersonId} onPerson={p.onPerson} onMove={p.onMovePerson} />}
 
         {p.tab === "library" && (
           <div className="fade-in">

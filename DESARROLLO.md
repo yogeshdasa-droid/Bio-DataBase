@@ -2,7 +2,7 @@
 
 Documento para retomar el trabajo en el futuro (una persona o una sesión nueva de Claude).
 Resume qué es la app, cómo está hecha, qué reglas no hay que romper y qué queda pendiente.
-Última actualización: **25-10-2026** (versión **0.1.0**).
+Última actualización: **26-10-2026** (versión **0.2.0**).
 
 > **Para retomar con Claude**, basta con abrir esta carpeta y decir algo como:
 > «Lee `DESARROLLO.md` y continuamos con Bio-Data: quiero cambiar…».
@@ -31,12 +31,27 @@ la app. Un solo archivo lo contiene todo (y la copia de seguridad es ese archivo
   `%APPDATA%\com.whispers.biodata\biodata antes de limpiar notas.db` (se puede borrar).
 - La base de datos **no** está en GitHub (es del usuario y es grande).
 
+### Llevar la app a otro PC
+
+El instalador trae **solo el programa, no los datos**. Los datos están en el archivo
+`biodata.db`. Para tenerlo todo en otro PC:
+
+1. En este PC: Ajustes › General › **Copia de seguridad** (o copiar `%APPDATA%\com.whispers.biodata\biodata.db`
+   con la app cerrada).
+2. En el otro PC: instalar Bio-Data, **abrirlo una vez y cerrarlo** (crea la carpeta).
+3. Copiar el archivo a `%APPDATA%\com.whispers.biodata\biodata.db` en el otro PC (sustituyendo el que
+   haya; si hay `biodata.db-wal` / `-shm`, borrarlos) y abrir la app.
+
+Si no se copia, la primera vez intenta importar las carpetas de `DEFAULT_SOURCES`
+(`G:\Whispers\Data Bases\...`); si no existen, empieza vacía. Idea pendiente: un botón
+«Restaurar copia de seguridad» en Ajustes.
+
 ---
 
 ## 2. Reglas que no hay que romper
 
 1. **Nunca borrar datos del usuario.** Tablas de datos: `persons`, `docs`, `sections`, `files`,
-   `bookmarks`, `meta`, `person_photos`. Si cambia su estructura → subir `DATA_VERSION` en
+   `bookmarks`, `meta`, `person_photos`, `person_tree`. Si cambia su estructura → subir `DATA_VERSION` en
    `src-tauri/src/db.rs` y escribir una migración que conserve todo. Un programa viejo se niega
    a abrir una base de datos de formato más nuevo (para no estropearla).
 2. Tablas **derivadas** (se pueden reconstruir): `sections_fts`, `docs_fts`, `persons_fts`.
@@ -59,7 +74,7 @@ $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Env
 npm install            # solo la primera vez en un equipo nuevo
 npm run app:dev        # abrir la app en modo pruebas (puerto 1421)
 npx tsc --noEmit       # comprobar errores de TypeScript
-cd src-tauri; cargo test   # pruebas automáticas de Rust (13)
+cd src-tauri; cargo test   # pruebas automáticas de Rust (14)
 npm run app:build      # generar el instalador
 ```
 
@@ -136,10 +151,21 @@ Direcciones internas de archivos (las sirve `serve_file` en `main.rs`):
 
 ---
 
-## 5. Qué hace hoy (v0.1.0)
+## 5. Qué hace hoy (v0.2.0)
 
 - **Fichas**: nombre, otros nombres, aparición, desaparición, lugar, guru, discípulos, obras,
   notas y **una imagen** (pinchar en el cuadro grande; se guarda en `person_photos`).
+- **Personas en dos grupos**: **Guru Paramparā** (árbol guru → discípulos, plegable) y
+  **Otros vaiṣṇavas** (por orden alfabético). Se ordena **arrastrando con el ratón**: encima de una
+  ficha = su discípulo; en el borde de arriba / abajo = antes / después; a «Otros vaiṣṇavas» = sacarla
+  (sus discípulos suben a su lugar). También en el menú del botón derecho. Tabla `person_tree`
+  (DATA_VERSION 3); al unir o borrar fichas el árbol se mantiene. La primera vez se rellena sola con
+  la línea habitual desde Śrī Caitanya (`PARAMPARA` en `store.rs`, meta `parampara_seeded`).
+  El arrastre está hecho a mano (mousedown/mousemove): el arrastre del navegador no funciona porque
+  Tauri lo usa para importar archivos.
+- **Estilo de la app** (Ajustes › General): **«VS Code» por defecto** (colores Dark/Light Modern de
+  VS Code, letra Segoe UI, esquinas rectas, sin degradados) o «Bio-Data (anterior)». Es solo CSS:
+  bloque `data-skin="vscode"` al final de `styles.css`; `index.html` lo aplica antes de pintar.
 - **Una ficha con un solo texto** lo muestra directamente; con varios, tarjetas.
 - **Unir fichas** (sugiere nombres parecidos; nunca marca nada solo). Al unir, los textos y la
   imagen pasan a la ficha que queda y los nombres van a «otros nombres».
@@ -188,6 +214,12 @@ Resultado: 2.301 textos, 1.883 fichas, 7 duplicados omitidos, 0 fallos.
 ---
 
 ## 8. Historial
+
+- **26-10-2026 — v0.2.0**: estilo de la app «VS Code» (por defecto; el anterior sigue en Ajustes).
+  Personas en «Guru Paramparā» (árbol, arrastrar y soltar) y «Otros vaiṣṇavas».
+  DATA_VERSION 3 (tabla `person_tree`). Copia previa: `biodata antes de parampara.db`.
+  La v0.1.0 ya no abre esta base de datos (formato 3): instalar la 0.2.0.
+  Release: https://github.com/yogeshdasa-droid/Bio-DataBase/releases/tag/v0.2.0
 
 - **25-10-2026 — v0.1.0**: primera versión publicada. Revisión completa de la interfaz;
   estilo «Editor»; texto único dentro de la ficha; atrás/adelante; imagen de ficha
