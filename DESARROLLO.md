@@ -172,9 +172,10 @@ Direcciones internas de archivos (las sirve `serve_file` en `main.rs`):
 
 ---
 
-## 5. Qué hace hoy (v0.3.0)
+## 5. Qué hace hoy (v0.3.1)
 
-Novedades de la 0.3.0 (formato de base de datos 4):
+La 0.3.1 solo cambia el nombre a **Gaudiya Vaisnavas DB** y lleva las copias automáticas a
+Documentos (ver Historial). Novedades de la 0.3.0 (formato de base de datos 4):
 - **Copias de seguridad** automáticas y **restaurar** desde Ajustes (ver punto 1).
 - **Versiones anteriores** de cada texto y ficha (menú «…» del lector y de la ficha, y botón derecho):
   se guarda cómo estaba antes de cada cambio (una versión cada 10 min como mucho, las 30 últimas);
@@ -301,6 +302,7 @@ hacerlo de momento por el tiempo y el uso de Claude; si se hace, por tandas y co
   carpeta `%APPDATA%\com.whispers.biodata` quedó vacía y la app reimportó todo desde cero (sin las
   fichas rellenadas). Se recuperó con la copia de prueba de esa mañana; lo reimportado quedó en
   `copias\antes de recuperar 2026-10-26`. **Al desinstalar, no marcar «borrar los datos».**
+  Release: https://github.com/yogeshdasa-droid/Gaudiya-Vaisnavas-DB/releases/tag/v0.3.1
 
 - **26-10-2026 — v0.3.0**: copias automáticas y restaurar; versiones anteriores;
   calendario vaiṣṇava (calculado + importado de .ics); etiquetas; galería; guru/discípulos enlazados;
