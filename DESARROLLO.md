@@ -2,7 +2,7 @@
 
 Documento para retomar el trabajo en el futuro (una persona o una sesión nueva de Claude).
 Resume qué es la app, cómo está hecha, qué reglas no hay que romper y qué queda pendiente.
-Última actualización: **26-10-2026** (versión **0.3.0**, aún sin publicar).
+Última actualización: **26-10-2026** (versión **0.3.0**, publicada).
 
 > **Para retomar con Claude**, basta con abrir esta carpeta y decir algo como:
 > «Lee `DESARROLLO.md` y continuamos con Bio-Data: quiero cambiar…».
@@ -291,11 +291,12 @@ hacerlo de momento por el tiempo y el uso de Claude; si se hace, por tandas y co
 
 ## 8. Historial
 
-- **26-10-2026 — v0.3.0** (sin publicar): copias automáticas y restaurar; versiones anteriores;
+- **26-10-2026 — v0.3.0**: copias automáticas y restaurar; versiones anteriores;
   calendario vaiṣṇava (calculado + importado de .ics); etiquetas; galería; guru/discípulos enlazados;
   Revisar (repetidas, títulos, vacíos); línea de tiempo; árbol dibujado; filtros Paramparā y tipo;
   exportar a Markdown; aviso de versión nueva. DATA_VERSION 4 (solo tablas nuevas, vacías).
-  Probado con una copia de la base de datos (`BIO_DB`); 22 pruebas automáticas.
+  Probado con una copia de la base de datos (`BIO_DB`); 22 pruebas automáticas. GIF de novedades en
+  `docs/novedades-0.3.0.gif` (capturas por CDP + gifenc). Release: https://github.com/yogeshdasa-droid/Bio-DataBase/releases/tag/v0.3.0
 
 - **26-10-2026**: rellenadas a mano (Claude leyó sus textos) las 33 fichas de la Guru Paramparā:
   aparición, desaparición, lugar, guru, discípulos, obras, otros nombres y notas (padres, identidad
