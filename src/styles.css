@@ -2859,6 +2859,244 @@ body.dragging-person * {
   margin-left: 8px;
 }
 
+/* earlier versions: dates on the left, the chosen version on the right */
+.versions {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 12px;
+  height: 56vh;
+}
+.version-list {
+  overflow: auto;
+  border-right: 1px solid var(--border);
+  padding-right: 8px;
+}
+.version-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+.version-list button:hover {
+  background: var(--hover);
+}
+.version-list button.on {
+  background: var(--accent-soft);
+}
+.version-list strong {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.version-list em {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.version-text {
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+/* labels */
+.tag.clickable {
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+}
+.tag.clickable:hover {
+  text-decoration: underline;
+}
+.tag-filter {
+  padding: 2px 4px 6px;
+}
+.tag-filter select {
+  width: 100%;
+}
+.name-link.from-tree {
+  border-style: dashed;
+}
+
+/* lunar days */
+.lunar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  font-size: 12px;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  white-space: nowrap;
+}
+.lunar-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-style: normal;
+  color: var(--muted);
+}
+.lunar-hint.ok {
+  color: var(--accent-text);
+}
+
+/* the calendar on the home page */
+.calendar .cal-today {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.cal-day {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 260px;
+}
+.cal-day .lunar {
+  margin-left: 4px;
+}
+.cal-events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+.cal-event {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 4px;
+  border-radius: 99px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+}
+.cal-event:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.cal-event img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.cal-event.disappearance span::before {
+  content: "✦ ";
+  color: var(--muted);
+}
+.cal-list h3 {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.cal-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* pictures of a record */
+.gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.gallery figure {
+  position: relative;
+  margin: 0;
+  width: 140px;
+}
+.gallery img {
+  display: block;
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  cursor: zoom-in;
+}
+.gallery figcaption {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: none;
+  gap: 2px;
+  background: var(--surface);
+  border-radius: 6px;
+}
+.gallery figure:hover figcaption {
+  display: flex;
+}
+.gallery-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 140px;
+  height: 140px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.gallery-add:hover {
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.82);
+  cursor: zoom-out;
+}
+.zoom img {
+  max-width: 92vw;
+  max-height: 92vh;
+}
+
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 4px;
+}
+
 /* ================================================================ skin: VS Code
    The app dressed like Visual Studio Code (Dark Modern / Light Modern):
    flat colours, Segoe UI, square corners, blue accent. Only looks change. */
@@ -3086,4 +3324,228 @@ body.dragging-person * {
 }
 :root[data-skin="vscode"] .hero-icon {
   box-shadow: none;
+}
+
+/* repeated records */
+.dup-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.dup-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.dup-table tr.off .dup-name {
+  opacity: 0.5;
+}
+.dup-name em {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.dup-tree {
+  margin-left: 6px;
+  color: var(--accent);
+  vertical-align: -2px;
+}
+.dup-keep {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.title-edit {
+  width: 100%;
+  font-weight: 600;
+}
+
+/* calendar events that are not a person */
+.cal-event.plain {
+  cursor: default;
+  padding-left: 8px;
+}
+.cal-event.plain:hover {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+.cal-event.ekadasi {
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.cal-event.parana {
+  color: var(--muted);
+}
+.cal-event.computed span::after {
+  content: " ≈";
+  color: var(--muted);
+}
+.unmatched ul {
+  columns: 2;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* timeline and Paramparā tree */
+.view-head {
+  margin-bottom: 18px;
+}
+.view-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 6px;
+}
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.timeline,
+.tree-view {
+  padding: 28px 32px 60px;
+}
+.timeline section h2 {
+  margin: 22px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.tl-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) 90px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.tl-row:hover {
+  background: var(--hover);
+}
+.tl-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tl-row.tree .tl-name {
+  font-weight: 600;
+}
+.tl-name img {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.tl-years {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tl-track {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--hover);
+}
+.tl-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 5px;
+  background: var(--accent);
+}
+.tl-bar.partial {
+  opacity: 0.45;
+}
+.tl-scale {
+  position: relative;
+  height: 20px;
+  margin: 10px 0 0 calc(min(280px, 30%) + 110px);
+  font-size: 11px;
+  color: var(--muted);
+}
+.tl-scale span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+.tree-canvas {
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.tree-link {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+.tree-node {
+  cursor: pointer;
+}
+.tree-node rect {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 1.2;
+}
+.tree-node text {
+  fill: var(--text);
+  font-size: 13px;
+}
+.tree-node:hover rect {
+  fill: var(--accent-soft);
+}
+
+/* printing a record: only the record */
+@media print {
+  .topbar,
+  .sidebar,
+  .results,
+  .statusbar,
+  .splitter,
+  .person-actions,
+  .cover-remove,
+  .gallery-add,
+  .gallery figcaption,
+  .add-text-link,
+  .inline-actions {
+    display: none !important;
+  }
+  .app,
+  .panes,
+  .reader,
+  .reader-scroll {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+}
+
+.update-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-text);
+}
+.update-note .link-btn {
+  padding: 0;
+  font-size: inherit;
 }

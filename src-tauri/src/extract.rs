@@ -63,7 +63,12 @@ const BALARAM: &[(char, char)] = &[
     ('ù', 'ḥ'), ('Ù', 'Ḥ'), ('è', 'ṝ'), ('ÿ', 'ḷ'),
 ];
 
-fn balaram_to_iast(text: &str) -> String {
+/// One of the Latin-1 letters a Balaram font uses for an IAST letter.
+pub fn is_balaram_letter(c: char) -> bool {
+    BALARAM.iter().any(|(b, _)| *b == c)
+}
+
+pub fn balaram_to_iast(text: &str) -> String {
     text.chars()
         .map(|c| BALARAM.iter().find(|(b, _)| *b == c).map_or(c, |(_, i)| *i))
         .collect()

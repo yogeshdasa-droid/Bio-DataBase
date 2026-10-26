@@ -2,7 +2,7 @@
 
 Documento para retomar el trabajo en el futuro (una persona o una sesión nueva de Claude).
 Resume qué es la app, cómo está hecha, qué reglas no hay que romper y qué queda pendiente.
-Última actualización: **26-10-2026** (versión **0.2.1**).
+Última actualización: **26-10-2026** (versión **0.3.0**, aún sin publicar).
 
 > **Para retomar con Claude**, basta con abrir esta carpeta y decir algo como:
 > «Lee `DESARROLLO.md` y continuamos con Bio-Data: quiero cambiar…».
@@ -27,8 +27,11 @@ de datos. Después las carpetas de origen no se vuelven a leer ni se modifican: 
 la app. Un solo archivo lo contiene todo (y la copia de seguridad es ese archivo).
 
 - Base de datos: `%APPDATA%\com.whispers.biodata\biodata.db` (≈ 240 MB).
-- Copia hecha antes de limpiar las notas (25-10-2026):
-  `%APPDATA%\com.whispers.biodata\biodata antes de limpiar notas.db` (se puede borrar).
+- **Copias de seguridad**: automáticas (por defecto cada semana, se guardan las 3 últimas) en
+  `%APPDATA%\com.whispers.biodata\copias\` («Bio-Data automática AAAA-MM-DD.db»). Ajustes › Copias de
+  seguridad: hacer una ahora, cambiar la frecuencia, ver la lista, **restaurar** (antes de restaurar se
+  guarda sola «Bio-Data antes de restaurar …») y borrar. Las copias hechas antes de cambios grandes
+  («biodata antes de …db», junto a la base de datos) también salen en esa lista.
 - La base de datos **no** está en GitHub (es del usuario y es grande).
 
 ### Llevar la app a otro PC
@@ -36,22 +39,20 @@ la app. Un solo archivo lo contiene todo (y la copia de seguridad es ese archivo
 El instalador trae **solo el programa, no los datos**. Los datos están en el archivo
 `biodata.db`. Para tenerlo todo en otro PC:
 
-1. En este PC: Ajustes › General › **Copia de seguridad** (o copiar `%APPDATA%\com.whispers.biodata\biodata.db`
-   con la app cerrada).
-2. En el otro PC: instalar Bio-Data, **abrirlo una vez y cerrarlo** (crea la carpeta).
-3. Copiar el archivo a `%APPDATA%\com.whispers.biodata\biodata.db` en el otro PC (sustituyendo el que
-   haya; si hay `biodata.db-wal` / `-shm`, borrarlos) y abrir la app.
+1. En este PC: Ajustes › Copias de seguridad › **Guardar una copia en otro sitio…** (un pendrive, por ejemplo).
+2. En el otro PC: instalar Bio-Data, abrirlo y en Ajustes › Copias de seguridad › **Restaurar desde un
+   archivo…** elegir esa copia.
 
-Si no se copia, la primera vez intenta importar las carpetas de `DEFAULT_SOURCES`
-(`G:\Whispers\Data Bases\...`); si no existen, empieza vacía. Idea pendiente: un botón
-«Restaurar copia de seguridad» en Ajustes.
+Si no se restaura nada, la primera vez intenta importar las carpetas de `DEFAULT_SOURCES`
+(`G:\Whispers\Data Bases\...`); si no existen, empieza vacía.
 
 ---
 
 ## 2. Reglas que no hay que romper
 
 1. **Nunca borrar datos del usuario.** Tablas de datos: `persons`, `docs`, `sections`, `files`,
-   `bookmarks`, `meta`, `person_photos`, `person_tree`. Si cambia su estructura → subir `DATA_VERSION` en
+   `bookmarks`, `meta`, `person_photos`, `person_tree` y (formato 4) `history`, `person_tags`,
+   `person_images`, `person_distinct`, `calendar_events`. Si cambia su estructura → subir `DATA_VERSION` en
    `src-tauri/src/db.rs` y escribir una migración que conserve todo. Un programa viejo se niega
    a abrir una base de datos de formato más nuevo (para no estropearla).
 2. Tablas **derivadas** (se pueden reconstruir): `sections_fts`, `docs_fts`, `persons_fts`.
@@ -74,7 +75,7 @@ $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Env
 npm install            # solo la primera vez en un equipo nuevo
 npm run app:dev        # abrir la app en modo pruebas (puerto 1421)
 npx tsc --noEmit       # comprobar errores de TypeScript
-cd src-tauri; cargo test   # pruebas automáticas de Rust (14)
+cd src-tauri; cargo test   # pruebas automáticas de Rust (22)
 npm run app:build      # generar el instalador
 ```
 
@@ -84,6 +85,12 @@ npm run app:build      # generar el instalador
   dos abiertas a la vez si se van a hacer cambios.
 - Importación real a una base de datos de prueba (no toca la buena):
   `$env:BIO_DB = "C:\ruta\test.db"; cargo test real_import -- --ignored --nocapture`
+- **Probar la app con una copia** (no toca la buena; imprescindible si se cambia `DATA_VERSION`,
+  porque la versión instalada ya no abriría la base de datos): copiar `biodata.db` (+ `-wal`/`-shm`)
+  a una carpeta y arrancar con `$env:BIO_DB = "C:\carpeta\biodata.db"; npm run app:dev`
+  (`BIO_DB` solo funciona en modo pruebas). Las copias automáticas van entonces a `C:\carpeta\copias`.
+- No lanzar `cargo test` mientras `app:dev` está compilando: a veces el enlazador falla
+  («unresolved external symbol»); se arregla con `cargo clean -p bio-data` y volver a compilar.
 
 ### Probar la interfaz desde Claude (capturas y clics)
 
@@ -113,12 +120,19 @@ Para probar cosas que modifican datos, crear fichas de prueba (p. ej. «Zzprueba
 
 ```
 src-tauri/src/                       (Rust: datos y lógica)
-  main.rs     comandos que llama la interfaz; protocolo bio:// (portadas, PDF, fotos);
-              importación inicial (DEFAULT_SOURCES); trabajos en segundo plano;
-              limpieza única de notas al arrancar
+  main.rs     comandos que llama la interfaz; protocolo bio:// (portadas, PDF, fotos, imágenes);
+              importación inicial (DEFAULT_SOURCES); trabajos en segundo plano; copia automática
+              (20 s después de arrancar); limpiezas únicas al arrancar (notas, títulos, claves)
   db.rs       esquema de tablas, DATA_VERSION / FTS_VERSION
-  store.rs    escritura: textos, secciones, fichas (person_key, unir), papelera, fotos,
-              clean_callouts, rebuild_fts
+  backup.rs   copias de seguridad: automáticas (meta backup_days/keep/last), lista, restaurar
+  calendar.rs calendario vaiṣṇava: tithi y mes calculados (Sol y Luna al amanecer en Māyāpur,
+              Meeus), lectura de fechas de las fichas («Bhadra Sukla Dvadasi», «8 October 1898»),
+              calendario importado (.ics) con nombres → fichas, «hoy y próximos días», años para
+              la línea de tiempo
+  export.rs   exportar todo a Markdown (Fichas/ + Textos/, enlaces de Obsidian) y una ficha con sus textos
+  store.rs    escritura: textos, secciones, fichas (person_key, unir, etiquetas), papelera, fotos
+              y galería, versiones anteriores (history), clean_callouts, tidy_doc_titles,
+              «Revisar» (textos vacíos, títulos dudosos), fichas distintas, rebuild_fts
   import.rs   importador: Calibre (opf + portada + pdf), notas de Obsidian en carpetas A–Z
               (= una ficha cada una), duplicados por huella, «Rupa - v.1» → ficha «Rupa…»
   extract.rs  md / txt / pdf / docx / html y .doc antiguos (texto legible del binario;
@@ -142,16 +156,45 @@ src/                                 (React: la interfaz)
     PersonView.tsx  la ficha: imagen, datos, textos (uno → se muestra dentro), parecidas
     Reader.tsx      lector de un texto (por secciones) y visor del PDF original; SectionView
     Dialogs.tsx     editar texto, ficha, unir fichas, importar, mandar a la papelera
-    Settings.tsx    Ajustes: General, Carpetas de origen, Papelera, Ayuda
+    Settings.tsx    Ajustes: General (+ calendario, exportar), Copias de seguridad, Revisar,
+                    Carpetas de origen, Papelera, Ayuda (+ buscar actualizaciones)
+    Calendar.tsx    calendario de Inicio (hoy y próximos 30 días)
+    Review.tsx      pestaña Revisar y ayudante de fichas repetidas (dupKey estricto)
+    Timeline.tsx, TreeView.tsx   línea de tiempo y árbol dibujado de la Paramparā
     Home.tsx, Results.tsx, ContextMenu.tsx, ui.tsx
+  update.ts         ¿hay versión nueva en GitHub? (una vez al día; aviso en la barra de estado)
 ```
 
 Direcciones internas de archivos (las sirve `serve_file` en `main.rs`):
-`http://bio.localhost/cover/<docId>`, `/original/<docId>`, `/photo/<personId>`.
+`http://bio.localhost/cover/<docId>`, `/original/<docId>`, `/photo/<personId>`, `/image/<imageId>`.
 
 ---
 
-## 5. Qué hace hoy (v0.2.1)
+## 5. Qué hace hoy (v0.3.0)
+
+Novedades de la 0.3.0 (formato de base de datos 4):
+- **Copias de seguridad** automáticas y **restaurar** desde Ajustes (ver punto 1).
+- **Versiones anteriores** de cada texto y ficha (menú «…» del lector y de la ficha, y botón derecho):
+  se guarda cómo estaba antes de cada cambio (una versión cada 10 min como mucho, las 30 últimas);
+  volver a una versión también se puede deshacer.
+- **Calendario vaiṣṇava** en Inicio: hoy y los próximos 30 días. El usuario sigue un calendario
+  Gauḍīya que exporta en **.ics** (`gaudiya_calendar.ics`): se importa en Ajustes › General o
+  arrastrándolo a la ventana, y **sus fechas mandan** (Ekādaśī, Pāraṇa, festivales, Āvirbhāva /
+  Tirobhāva enlazados con las fichas por el nombre; si hay fichas repetidas, gana la de la Paramparā).
+  Lo que no está en él se calcula (marcado ≈): tithi al amanecer en Māyāpur, leído de los campos
+  Aparición / Desaparición. Ajustes muestra los nombres del calendario que no tienen ficha.
+- **Ficha**: día lunar bajo las fechas; guru y discípulos como enlaces (también «Rupa Gosvami (diksa);…»),
+  y si el campo está vacío, los de la Paramparā; **etiquetas** (filtro en la barra lateral);
+  **galería de imágenes** (ampliar, usar como principal, quitar); exportar con sus textos; imprimir.
+- **Ajustes › Revisar**: ayudante de **fichas repetidas** (57 grupos; uno a uno: unir / son distintas /
+  saltar; nunca marca nada solo), **títulos dudosos** (renombrar ahí mismo) y **textos vacíos**.
+  Los títulos «ÃTHE…» y en fuente Balaram se arreglan solos al abrir.
+- **Línea de tiempo** y **árbol dibujado** de la Paramparā (botones en Inicio).
+- Búsqueda: filtros **Solo Guru Paramparā** y **Notas / PDF / Word**.
+- **Exportar todo a Markdown** (Ajustes › General): carpetas Fichas/ y Textos/ para Obsidian.
+- **Aviso de versión nueva** (GitHub, una vez al día) y botón en Ayuda; abre la descarga del instalador.
+
+Lo de antes:
 
 - **Fichas**: nombre, otros nombres, aparición, desaparición, lugar, guru, discípulos, obras,
   notas y **una imagen** (pinchar en el cuadro grande; se guarda en `person_photos`).
@@ -234,20 +277,25 @@ hacerlo de momento por el tiempo y el uso de Claude; si se hace, por tandas y co
 
 ## 7. Pendientes e ideas
 
-- Título de algunos .DOC con basura al principio («ÃTHE ACCEPTANCE…»).
-- 9 textos vacíos (notas vacías y 1 PDF escaneado sin texto).
+- Repasar en Ajustes › Revisar: 57 grupos de fichas repetidas, 10 títulos dudosos, 15 textos vacíos.
+- OCR del único PDF escaneado («Krishna dasa babaji - v.1»): no se metió un motor de OCR en la app
+  por un solo archivo; se podría transcribir aparte.
+- Firma digital del .exe (quita el aviso de Windows): cuesta un certificado anual; no se ha hecho.
 - Rellenar las fichas (fechas, guru, discípulos…) a partir de los textos: **hecho para las 33 de la
   Guru Paramparā** (26-10-2026, leyendo Claude los textos; solo campos vacíos, en inglés como los
   textos). Quedan las de «Otros vaiṣṇavas».
-- Exportar todo a Markdown.
-- Muchas fichas duplicadas por variantes de nombre («Rupa Gosvami» / «Rupa Goswami,Srila»):
-  repasarlas con «Unir fichas».
 - Enlaces de nombres: ahora se calculan en la pantalla cada vez; si algún día va lento con textos
   muy largos, se podría calcular en Rust.
 
 ---
 
 ## 8. Historial
+
+- **26-10-2026 — v0.3.0** (sin publicar): copias automáticas y restaurar; versiones anteriores;
+  calendario vaiṣṇava (calculado + importado de .ics); etiquetas; galería; guru/discípulos enlazados;
+  Revisar (repetidas, títulos, vacíos); línea de tiempo; árbol dibujado; filtros Paramparā y tipo;
+  exportar a Markdown; aviso de versión nueva. DATA_VERSION 4 (solo tablas nuevas, vacías).
+  Probado con una copia de la base de datos (`BIO_DB`); 22 pruebas automáticas.
 
 - **26-10-2026**: rellenadas a mano (Claude leyó sus textos) las 33 fichas de la Guru Paramparā:
   aparición, desaparición, lugar, guru, discípulos, obras, otros nombres y notas (padres, identidad

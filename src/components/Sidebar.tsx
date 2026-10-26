@@ -152,6 +152,8 @@ function PersonList({
   activeId,
   onPerson,
   onMove,
+  tag,
+  onTag,
 }: {
   t: T;
   lang: Lang;
@@ -159,10 +161,11 @@ function PersonList({
   activeId: number | null;
   onPerson: (id: number) => void;
   onMove: (id: number, place: TreePlace) => void;
+  tag: string | null;
+  onTag: (tag: string | null) => void;
 }) {
   const [filter, setFilter] = useState("");
   const [fieldHits, setFieldHits] = useState<number[]>([]);
-  const folded = useMemo(() => persons.map((p) => ` ${foldName(`${p.name} ${p.aka}`)}`), [persons]);
   const [closedGroups, toggleGroup] = useStoredSet<string>("personGroups");
   const [closed, toggleNode] = useStoredSet<number>("treeClosed");
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -175,12 +178,20 @@ function PersonList({
     return () => window.clearTimeout(h);
   }, [filter]);
 
+  const tagsOf = (p: PersonListItem) => p.tags.split(",").map((x) => x.trim()).filter(Boolean);
+  const allTags = useMemo(() => {
+    const count = new Map<string, number>();
+    for (const p of persons) for (const tg of tagsOf(p)) count.set(tg, (count.get(tg) ?? 0) + 1);
+    return [...count].sort((a, b) => a[0].localeCompare(b[0], undefined, { sensitivity: "base" }));
+  }, [persons]);
+
   const shown = useMemo(() => {
     const words = foldName(filter).split(" ").filter(Boolean);
-    if (!words.length) return persons;
+    const tagged = tag ? persons.filter((p) => tagsOf(p).includes(tag)) : persons;
+    if (!words.length) return tagged;
     const extra = new Set(fieldHits);
-    return persons.filter((p, i) => words.every((w) => folded[i].includes(` ${w}`)) || extra.has(p.id));
-  }, [filter, persons, folded, fieldHits]);
+    return tagged.filter((p) => words.every((w) => ` ${foldName(`${p.name} ${p.aka}`)}`.includes(` ${w}`)) || extra.has(p.id));
+  }, [filter, tag, persons, fieldHits]);
 
   // the Guru Paramparā: the disciples of each record, in their order
   const { kids, parentOf, others } = useMemo(() => {
@@ -325,7 +336,21 @@ function PersonList({
           </button>
         )}
       </div>
-      {filter ? (
+      {allTags.length > 0 && (
+        <div className="tag-filter">
+          <select value={tag ?? ""} onChange={(e) => onTag(e.target.value || null)} title={t.tags}>
+            <option value="">
+              {t.tags}: {t.allTags}
+            </option>
+            {allTags.map(([tg, n]) => (
+              <option key={tg} value={tg}>
+                #{tg} ({n})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {filter || tag ? (
         <>
           {shown.length === 0 && <div className="side-empty">{t.noPersons}</div>}
           {shown.map((p) => (
@@ -417,6 +442,8 @@ interface Props {
   history: string[];
   onHistory: (q: string) => void;
   onClearHistory: () => void;
+  tag: string | null;
+  onTag: (tag: string | null) => void;
 }
 
 export function Sidebar(p: Props) {
@@ -450,7 +477,7 @@ export function Sidebar(p: Props) {
         ))}      </nav>
 
       <div className="side-scroll" key={p.tab}>
-        {p.tab === "persons" && <PersonList t={t} lang={p.lang} persons={p.persons} activeId={p.activePersonId} onPerson={p.onPerson} onMove={p.onMovePerson} />}
+        {p.tab === "persons" && <PersonList t={t} lang={p.lang} persons={p.persons} activeId={p.activePersonId} onPerson={p.onPerson} onMove={p.onMovePerson} tag={p.tag} onTag={p.onTag} />}
 
         {p.tab === "library" && (
           <div className="fade-in">

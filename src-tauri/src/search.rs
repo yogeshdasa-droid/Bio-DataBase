@@ -145,6 +145,12 @@ pub struct SearchParams {
     pub dir: Option<String>,
     pub doc_id: Option<i64>,
     pub person_id: Option<i64>,
+    /// only texts of records in the Guru Paramparā
+    #[serde(default)]
+    pub parampara_only: bool,
+    /// only these kinds of text: "md" (notes), "pdf", "doc" (Word, also docx), "other"
+    #[serde(default)]
+    pub kinds: Vec<String>,
     #[serde(default)]
     pub offset: i64,
     pub limit: Option<i64>,
@@ -209,6 +215,22 @@ fn filters(p: &SearchParams, with_collections: bool) -> Filters {
     if let Some(id) = p.person_id {
         sql.push_str(" AND d.person_id = ?");
         args.push(Value::Integer(id));
+    }
+    if p.parampara_only {
+        sql.push_str(" AND d.person_id IN (SELECT person_id FROM person_tree)");
+    }
+    if !p.kinds.is_empty() {
+        let mut kinds: Vec<&str> = Vec::new();
+        for k in &p.kinds {
+            match k.as_str() {
+                "md" => kinds.extend(["md", "new", "txt"]),
+                "pdf" => kinds.push("pdf"),
+                "doc" => kinds.extend(["doc", "docx"]),
+                _ => kinds.push("html"),
+            }
+        }
+        sql.push_str(&format!(" AND d.kind IN ({})", vec!["?"; kinds.len()].join(",")));
+        args.extend(kinds.into_iter().map(|k| Value::Text(k.to_string())));
     }
     Filters { sql, args }
 }
@@ -489,6 +511,8 @@ pub struct PersonListItem {
     pub has_photo: bool,
     /// place in the Guru Paramparā: None = not in it ("Other Vaiṣṇavas")
     pub tree: Option<TreeNode>,
+    /// labels, comma separated
+    pub tags: String,
 }
 
 #[derive(Serialize)]
@@ -504,13 +528,23 @@ pub fn list_persons(conn: &Connection) -> rusqlite::Result<Vec<PersonListItem>> 
                 (SELECT f.doc_id FROM files f JOIN docs d ON d.id = f.doc_id
                  WHERE d.person_id = p.id AND d.deleted IS NULL AND f.role = 'cover' ORDER BY d.title LIMIT 1),
                 EXISTS(SELECT 1 FROM person_photos ph WHERE ph.person_id = p.id),
-                t.person_id IS NOT NULL, t.parent_id, t.pos
+                t.person_id IS NOT NULL, t.parent_id, t.pos,
+                COALESCE((SELECT group_concat(tag, ', ') FROM person_tags g WHERE g.person_id = p.id), '')
          FROM persons p LEFT JOIN person_tree t ON t.person_id = p.id
          ORDER BY p.name COLLATE NOCASE",
     )?;
     let rows = st.query_map([], |r| {
         let tree = if r.get::<_, bool>(6)? { Some(TreeNode { parent: r.get(7)?, pos: r.get(8)? }) } else { None };
-        Ok(PersonListItem { id: r.get(0)?, name: r.get(1)?, aka: r.get(2)?, docs: r.get(3)?, cover_doc: r.get(4)?, has_photo: r.get(5)?, tree })
+        Ok(PersonListItem {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            aka: r.get(2)?,
+            docs: r.get(3)?,
+            cover_doc: r.get(4)?,
+            has_photo: r.get(5)?,
+            tree,
+            tags: r.get(9)?,
+        })
     })?;
     rows.collect()
 }
@@ -535,12 +569,18 @@ pub struct Person {
     pub created: String,
     pub modified: String,
     pub has_photo: bool,
+    /// gallery pictures (ids served at /image/<id>)
+    pub images: Vec<i64>,
+    /// the lunar days read from the appearance / disappearance fields
+    pub appearance_day: Option<String>,
+    pub disappearance_day: Option<String>,
     pub docs: Vec<PersonDoc>,
 }
 
 pub fn get_person(conn: &Connection, id: i64) -> rusqlite::Result<Person> {
     let (fields, created, modified) = conn.query_row(
-        "SELECT name, aka, appearance, disappearance, place, guru, disciples, works, notes, created, modified
+        "SELECT name, aka, appearance, disappearance, place, guru, disciples, works, notes, created, modified,
+                COALESCE((SELECT group_concat(tag, ', ') FROM person_tags WHERE person_id = ?1), '')
          FROM persons WHERE id = ?1",
         [id],
         |r| {
@@ -555,6 +595,7 @@ pub fn get_person(conn: &Connection, id: i64) -> rusqlite::Result<Person> {
                     disciples: r.get(6)?,
                     works: r.get(7)?,
                     notes: r.get(8)?,
+                    tags: r.get(11)?,
                 },
                 r.get(9)?,
                 r.get(10)?,
@@ -580,7 +621,20 @@ pub fn get_person(conn: &Connection, id: i64) -> rusqlite::Result<Person> {
         })?
         .collect::<Result<_, _>>()?;
     let has_photo = conn.query_row("SELECT EXISTS(SELECT 1 FROM person_photos WHERE person_id = ?1)", [id], |r| r.get(0))?;
-    Ok(Person { id, fields, created, modified, has_photo, docs })
+    let images = conn
+        .prepare("SELECT id FROM person_images WHERE person_id = ?1 ORDER BY id")?
+        .query_map([id], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    let lunar = |text: &str| crate::calendar::parse_day(text).map(crate::calendar::label);
+    let appearance_day = lunar(&fields.appearance);
+    let disappearance_day = lunar(&fields.disappearance);
+    Ok(Person { id, fields, created, modified, has_photo, images, appearance_day, disappearance_day, docs })
+}
+
+/// A gallery picture of a record (served at /image/<id>).
+pub fn get_image(conn: &Connection, image_id: i64) -> rusqlite::Result<Option<(String, Vec<u8>)>> {
+    conn.query_row("SELECT mime, data FROM person_images WHERE id = ?1", [image_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .optional()
 }
 
 /// Records whose name or fields match the query (same syntax as the main search).

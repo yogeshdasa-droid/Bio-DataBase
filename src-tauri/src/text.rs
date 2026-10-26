@@ -35,6 +35,16 @@ pub fn clean_title(stem: &str) -> String {
     }
 }
 
+/// A title taken from the first line of an old Word file: without the stray
+/// byte those files put before it ("ÃTHE ACCEPTANCE…" → "THE ACCEPTANCE…"),
+/// and in IAST when it was typed with a Balaram font ("Çréla" → "Śrīla").
+pub fn tidy_doc_title(title: &str) -> String {
+    let t = title.trim_start_matches(|c: char| c.is_whitespace() || (('\u{80}'..='\u{FF}').contains(&c) && !crate::extract::is_balaram_letter(c)));
+    // ä å ë ö ò ù are never English: the title is Balaram
+    let t = if t.chars().any(|c| "äåëöòù".contains(c)) { crate::extract::balaram_to_iast(t) } else { t.to_string() };
+    t.trim().to_string()
+}
+
 static RE_TAG: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?:^|[\s(,])#(\p{L}[\p{L}\p{N}_/\-]*)").unwrap()
 });

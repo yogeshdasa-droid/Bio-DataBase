@@ -9,7 +9,10 @@ use std::path::Path;
 /// file: it is refused instead of risking the user's data.
 /// 2: + person_photos (created empty on open; nothing else changes).
 /// 3: + person_tree (the Guru Paramparā; created empty on open).
-pub const DATA_VERSION: u32 = 3;
+/// 4: + history (earlier versions of texts and records), person_tags,
+///    person_images (more pictures of a record), person_distinct,
+///    calendar_events (the user's .ics calendar); all created empty on open.
+pub const DATA_VERSION: u32 = 4;
 /// Bump when the folding rules or the FTS layout change: the search tables
 /// are rebuilt from `sections` / `docs` / `persons` (no data is lost).
 pub const FTS_VERSION: &str = "1";
@@ -104,6 +107,53 @@ CREATE TABLE IF NOT EXISTS person_tree(
     pos INTEGER NOT NULL DEFAULT 0  -- order among the disciples of the same guru
 );
 CREATE INDEX IF NOT EXISTS person_tree_parent ON person_tree(parent_id, pos);
+
+-- earlier versions (format 4): the state of a text or a record before it was
+-- changed, as JSON; kept so a change can be undone
+CREATE TABLE IF NOT EXISTS history(
+    id INTEGER PRIMARY KEY,
+    kind TEXT NOT NULL,             -- doc | person
+    target INTEGER NOT NULL,        -- docs.id / persons.id
+    label TEXT NOT NULL,            -- title / name at that time
+    data TEXT NOT NULL,
+    saved TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS history_target ON history(kind, target, id);
+
+-- labels of a record (format 4): "Vṛndāvana", "Gosvāmī"…
+CREATE TABLE IF NOT EXISTS person_tags(
+    person_id INTEGER NOT NULL,
+    tag TEXT NOT NULL,
+    PRIMARY KEY(person_id, tag)
+);
+CREATE INDEX IF NOT EXISTS person_tags_tag ON person_tags(tag);
+
+-- more pictures of a record (format 4); the main one stays in person_photos
+CREATE TABLE IF NOT EXISTS person_images(
+    id INTEGER PRIMARY KEY,
+    person_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    data BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS person_images_person ON person_images(person_id);
+
+-- the user's Vaiṣṇava calendar, imported from an .ics file (format 4)
+CREATE TABLE IF NOT EXISTS calendar_events(
+    uid TEXT PRIMARY KEY,
+    date TEXT NOT NULL,             -- YYYY-MM-DD
+    summary TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS calendar_events_date ON calendar_events(date);
+
+-- records with similar names the user said are different people (format 4);
+-- a < b
+CREATE TABLE IF NOT EXISTS person_distinct(
+    a INTEGER NOT NULL,
+    b INTEGER NOT NULL,
+    PRIMARY KEY(a, b)
+);
 "#;
 
 const FTS_SCHEMA: &str = r#"

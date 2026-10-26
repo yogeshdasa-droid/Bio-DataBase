@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { FileText, Folder, SearchX, UserRound, X } from "lucide-react";
+import { FileText, Folder, ListTree, SearchX, UserRound, X } from "lucide-react";
 import { Hit, hueOf, SearchResult } from "../api";
 import { highlightParts, Term } from "../fold";
 import { Lang, T } from "../i18n";
@@ -10,11 +10,16 @@ export interface Filters {
   scope: { dir: string; label: string } | null;
   doc: { id: number; title: string } | null;
   person: { id: number; name: string } | null;
+  /** only texts of records in the Guru Paramparā */
+  paramparaOnly: boolean;
+  /** only these kinds: "md" (notes), "pdf", "doc" (Word) */
+  kinds: string[];
 }
 
-export const EMPTY_FILTERS: Filters = { collections: [], scope: null, doc: null, person: null };
+export const EMPTY_FILTERS: Filters = { collections: [], scope: null, doc: null, person: null, paramparaOnly: false, kinds: [] };
 
-export const hasFilter = (f: Filters) => f.collections.length > 0 || !!f.scope || !!f.doc || !!f.person;
+export const hasFilter = (f: Filters) =>
+  f.collections.length > 0 || !!f.scope || !!f.doc || !!f.person || f.paramparaOnly || f.kinds.length > 0;
 
 interface Props {
   t: T;
@@ -97,6 +102,32 @@ export function Results(p: Props) {
               <i className="dot" />
               {f.name}
               <span className="n">{f.count.toLocaleString(lang)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="facets kinds">
+          <button
+            className={`facet ${filters.paramparaOnly ? "on" : ""}`}
+            title={t.onlyParamparaHint}
+            onClick={() => onFilters({ ...filters, paramparaOnly: !filters.paramparaOnly })}
+          >
+            <ListTree size={12} /> {t.parampara}
+          </button>
+          {(
+            [
+              ["md", t.kindNotes],
+              ["pdf", "PDF"],
+              ["doc", "Word"],
+            ] as [string, string][]
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              className={`facet ${filters.kinds.includes(k) ? "on" : ""}`}
+              onClick={() =>
+                onFilters({ ...filters, kinds: filters.kinds.includes(k) ? filters.kinds.filter((x) => x !== k) : [...filters.kinds, k] })
+              }
+            >
+              {label}
             </button>
           ))}
         </div>

@@ -1,14 +1,227 @@
 import { useEffect, useState } from "react";
-import { save } from "@tauri-apps/plugin-dialog";
-import { DatabaseBackup, FolderInput, HelpCircle, RefreshCw, Settings as Gear, Trash2, Undo2 } from "lucide-react";
-import { api, DefaultSource, Status, Trashed } from "../api";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { ArchiveRestore, CalendarDays, ClipboardCheck, Database, FileDown, DatabaseBackup, FolderInput, FolderOpen, HelpCircle, RefreshCw, Settings as Gear, Trash2, Undo2 } from "lucide-react";
+import { api, BackupCopy, BackupSettings, CalendarInfo, DefaultSource, PersonListItem, Status, Trashed } from "../api";
+import { ReviewPane } from "./Review";
+import { checkUpdate } from "../update";
+import { getVersion } from "@tauri-apps/api/app";
 import { Lang, T } from "../i18n";
 import { Kbd, Modal } from "./ui";
 import type { ReaderStyle } from "./Reader";
 
 export type Theme = "system" | "light" | "dark";
 export type Skin = "vscode" | "classic";
-export type SettingsTab = "general" | "sources" | "trash" | "help";
+export type SettingsTab = "general" | "backups" | "review" | "sources" | "trash" | "help";
+
+const when = (secs: number, lang: Lang) =>
+  new Date(secs * 1000).toLocaleString(lang === "es" ? "es-ES" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
+
+/** This program's version and a check for a newer one. */
+function UpdateCheck({ t, onToast }: { t: T; onToast: (msg: string) => void }) {
+  const [version, setVersion] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => void getVersion().then(setVersion), []);
+  const check = async () => {
+    setBusy(true);
+    try {
+      const u = await checkUpdate();
+      if (!u) onToast(t.updateNone);
+      else if (window.confirm(`${t.updateAvailable(u.version)}
+
+${t.updateHint}
+
+${t.updateDownload}?`)) await api.openExternal(u.url);
+    } catch (e) {
+      onToast(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="btn-row">
+      <span className="muted">{t.versionLabel(version)}</span>
+      <button className="btn ghost" disabled={busy} onClick={check}>
+        {busy ? <span className="spinner" /> : <RefreshCw size={15} />} {t.checkUpdates}
+      </button>
+    </div>
+  );
+}
+
+/** The imported Vaiṣṇava calendar (.ics). */
+function CalendarSettings({ t, onToast, onChanged }: { t: T; onToast: (msg: string) => void; onChanged: () => void }) {
+  const [info, setInfo] = useState<CalendarInfo | null>(null);
+  const load = () => api.calendarInfo().then(setInfo, (e) => onToast(String(e)));
+  useEffect(() => void load(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = async () => {
+    try {
+      const path = await open({ multiple: false, filters: [{ name: "iCalendar", extensions: ["ics"] }] });
+      if (typeof path !== "string") return;
+      onToast(t.calendarDone(await api.importCalendar(path)));
+      load();
+      onChanged();
+    } catch (e) {
+      onToast(String(e));
+    }
+  };
+  const clear = async () => {
+    if (!window.confirm(t.calendarClearConfirm)) return;
+    await api.clearCalendar().catch((e) => onToast(String(e)));
+    load();
+    onChanged();
+  };
+  return (
+    <>
+      <h3>{t.calendarTitle}</h3>
+      <p className="muted small">
+        {info && info.count > 0 && info.from && info.to ? t.calendarRange(info.count, info.from, info.to) : t.calendarNone} {t.calendarImportHint}
+      </p>
+      <div className="btn-row">
+        <button className="btn ghost" onClick={pick}>
+          <CalendarDays size={15} /> {t.calendarImport}
+        </button>
+        {info && info.count > 0 && (
+          <button className="btn ghost" onClick={clear}>
+            <Trash2 size={15} /> {t.calendarClear}
+          </button>
+        )}
+      </div>
+      {info && info.unmatched.length > 0 && (
+        <details className="unmatched">
+          <summary className="muted small">{t.calendarUnmatched(info.unmatched.length)}</summary>
+          <ul>
+            {info.unmatched.map((n) => (
+              <li key={n}>{n}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </>
+  );
+}
+
+/** Automatic copies, the list of saved copies, and going back to one. */
+function Backups({ t, lang, onToast }: { t: T; lang: Lang; onToast: (msg: string) => void }) {
+  const [settings, setSettings] = useState<BackupSettings | null>(null);
+  const [copies, setCopies] = useState<{ dir: string; copies: BackupCopy[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    api.backupSettings().then(setSettings).catch((e) => onToast(String(e)));
+    api.listCopies().then(setCopies).catch((e) => onToast(String(e)));
+  };
+  useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const run = (f: () => Promise<unknown>) => async () => {
+    setBusy(true);
+    try {
+      await f();
+    } catch (e) {
+      onToast(String(e));
+    } finally {
+      setBusy(false);
+      load();
+    }
+  };
+  const change = (days: number, keep: number) =>
+    api.setBackupSettings(days, keep).then(() => setSettings((s) => s && { ...s, days, keep }), (e) => onToast(String(e)));
+
+  const restore = async (path: string, name: string) => {
+    if (!window.confirm(t.restoreConfirm(name))) return;
+    await api.restoreCopy(path);
+    // everything on screen belongs to the old data: start again
+    window.alert(t.restoredCopy);
+    window.location.reload();
+  };
+  const saveAs = async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    const path = await save({ defaultPath: `Bio-Data ${day}.db`, filters: [{ name: "Bio-Data", extensions: ["db"] }] });
+    if (!path) return;
+    await api.backup(path);
+    onToast(t.backupDone);
+  };
+  const fromFile = async () => {
+    const path = await open({ multiple: false, filters: [{ name: "Bio-Data", extensions: ["db"] }] });
+    if (typeof path === "string") await restore(path, path.split(/[\\/]/).pop() ?? path);
+  };
+
+  return (
+    <>
+      <h3>{t.autoBackup}</h3>
+      {settings && (
+        <>
+          <div className="seg">
+            {t.backupEvery.map(([d, label]) => (
+              <button key={d} className={settings.days === d ? "on" : ""} onClick={() => change(d, settings.keep)}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {settings.days > 0 && (
+            <label className="inline-field">
+              {t.backupKeep}
+              <select value={settings.keep} onChange={(e) => change(settings.days, Number(e.target.value))}>
+                {[2, 3, 5, 10].map((n) => (
+                  <option key={n} value={n}>
+                    {t.backupKeepN(n)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <p className="muted small">
+            {settings.last ? t.backupLast(when(settings.last, lang)) : t.backupNone} {t.backupAutoHint}
+          </p>
+        </>
+      )}
+      <div className="btn-row">
+        <button className="btn" disabled={busy} onClick={run(async () => (await api.backupNow(), onToast(t.backupDone)))}>
+          {busy ? <span className="spinner light" /> : <DatabaseBackup size={15} />} {t.backupNow}
+        </button>
+        <button className="btn ghost" disabled={busy} onClick={run(saveAs)}>
+          <DatabaseBackup size={15} /> {t.backupSaveAs}
+        </button>
+        {copies && (
+          <button className="btn ghost" onClick={() => api.openExternal(copies.dir).catch(() => onToast(t.noCopies))}>
+            <FolderOpen size={15} /> {t.openCopiesFolder}
+          </button>
+        )}
+      </div>
+
+      <h3>{t.copiesTitle}</h3>
+      {copies && copies.copies.length === 0 && <p className="muted">{t.noCopies}</p>}
+      <div className="lib-list">
+        {copies?.copies.map((c) => (
+          <div key={c.path} className="lib-item">
+            <Database size={18} />
+            <div className="lib-info">
+              <strong>{c.name}</strong>
+              <code title={c.path}>
+                {when(c.modified, lang)} · {(c.size / 1048576).toFixed(0)} MB{c.auto ? ` · ${t.copyAuto}` : ""}
+              </code>
+            </div>
+            <button className="btn ghost" disabled={busy} onClick={run(() => restore(c.path, c.name))}>
+              <ArchiveRestore size={15} /> {t.restoreCopy}
+            </button>
+            <button
+              className="icon-btn danger"
+              title={t.delete}
+              disabled={busy}
+              onClick={run(async () => {
+                if (window.confirm(t.deleteCopyConfirm(c.name))) await api.deleteCopy(c.path);
+              })}
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button className="btn ghost" disabled={busy} onClick={run(fromFile)}>
+        <ArchiveRestore size={15} /> {t.restoreFromFile}
+      </button>
+      {busy && <p className="muted small">{t.working}</p>}
+    </>
+  );
+}
 
 interface Props {
   t: T;
@@ -26,6 +239,9 @@ interface Props {
   onToast: (msg: string) => void;
   onChanged: () => void;
   onImportStarted: () => void;
+  persons: PersonListItem[];
+  onDuplicates: () => void;
+  onOpenDoc: (id: number) => void;
 }
 
 export function Settings(p: Props) {
@@ -42,14 +258,6 @@ export function Settings(p: Props) {
 
   const guard = (f: () => Promise<unknown>) => () => f().catch((e) => p.onToast(String(e)));
 
-  const backup = guard(async () => {
-    const day = new Date().toISOString().slice(0, 10);
-    const path = await save({ defaultPath: `Bio-Data ${day}.db`, filters: [{ name: "Bio-Data", extensions: ["db"] }] });
-    if (!path) return;
-    await api.backup(path);
-    p.onToast(t.backupDone);
-  });
-
   const reimport = (list: DefaultSource[]) =>
     guard(async () => {
       await api.importSources({ sources: list.filter((s) => s.exists), personPerFile: false, personId: null });
@@ -58,6 +266,8 @@ export function Settings(p: Props) {
 
   const tabs: [SettingsTab, typeof Gear, string][] = [
     ["general", Gear, t.general],
+    ["backups", DatabaseBackup, t.backups],
+    ["review", ClipboardCheck, t.review],
     ["sources", FolderInput, t.sourcesTitle],
     ["trash", Trash2, `${t.trash}${status?.trash ? ` (${status.trash})` : ""}`],
     ["help", HelpCircle, t.help],
@@ -110,6 +320,7 @@ export function Settings(p: Props) {
                   </button>
                 ))}
               </div>
+              <CalendarSettings t={t} onToast={p.onToast} onChanged={p.onChanged} />
               <h3>{t.database}</h3>
               {status && (
                 <p className="muted small">
@@ -119,15 +330,45 @@ export function Settings(p: Props) {
                 </p>
               )}
               <div className="btn-row">
-                <button className="btn" onClick={backup}>
-                  <DatabaseBackup size={15} /> {t.backup}
+                <button className="btn" onClick={() => setTab("backups")}>
+                  <DatabaseBackup size={15} /> {t.backups}
                 </button>
                 <button className="btn ghost" disabled={status?.busy} onClick={guard(async () => (await api.rebuildSearch(), p.onImportStarted()))} title={t.rebuildHint}>
                   <RefreshCw size={15} /> {t.rebuild}
                 </button>
               </div>
               <p className="muted small">{t.backupHint}</p>
+              <div className="btn-row">
+                <button
+                  className="btn ghost"
+                  disabled={status?.busy}
+                  title={t.exportAllHint}
+                  onClick={guard(async () => {
+                    const dir = await open({ directory: true });
+                    if (typeof dir !== "string") return;
+                    await api.exportMarkdown(dir);
+                    p.onImportStarted();
+                  })}
+                >
+                  <FileDown size={15} /> {t.exportAll}
+                </button>
+              </div>
+              <p className="muted small">{t.exportAllHint}</p>
             </>
+          )}
+
+          {tab === "backups" && <Backups t={t} lang={lang} onToast={p.onToast} />}
+
+          {tab === "review" && (
+            <ReviewPane
+              t={t}
+              lang={lang}
+              persons={p.persons}
+              onDuplicates={p.onDuplicates}
+              onOpenDoc={p.onOpenDoc}
+              onChanged={p.onChanged}
+              onToast={p.onToast}
+            />
           )}
 
           {tab === "sources" && (
@@ -213,6 +454,7 @@ export function Settings(p: Props) {
 
           {tab === "help" && (
             <>
+              <UpdateCheck t={t} onToast={p.onToast} />
               <h3>{t.syntax}</h3>
               <table className="syntax">
                 <tbody>

@@ -1,8 +1,9 @@
 import { useMemo } from "react";
-import { Clock, Database, FileText, HardDrive, Star, Upload, UserRound, Users } from "lucide-react";
+import { Clock, Clock3, Database, Network, FileText, HardDrive, Star, Upload, UserRound, Users } from "lucide-react";
 import { Bookmark, fileUrl, hueOf, PersonListItem, SearchResult, Status } from "../api";
 import { Lang, T } from "../i18n";
 import { AnimatedNumber } from "./ui";
+import { Calendar } from "./Calendar";
 
 export interface RecentDoc {
   docId: number;
@@ -23,9 +24,13 @@ interface Props {
   onRecent: (r: RecentDoc) => void;
   onBookmark: (b: Bookmark) => void;
   onImportDefaults: () => void;
+  /** changes when the data changes (the calendar is read again) */
+  reload: number;
+  onTimeline: () => void;
+  onTree: () => void;
 }
 
-export function Home({ t, lang, status, facets, persons, recent, bookmarks, onCollection, onPerson, onRecent, onBookmark, onImportDefaults }: Props) {
+export function Home({ t, lang, status, facets, persons, recent, bookmarks, onCollection, onPerson, onRecent, onBookmark, onImportDefaults, reload, onTimeline, onTree }: Props) {
   const max = Math.max(1, ...facets.map((f) => f.count));
   const top = useMemo(() => [...persons].sort((a, b) => b.docs - a.docs).slice(0, 12), [persons]);
   const stats = [
@@ -45,6 +50,16 @@ export function Home({ t, lang, status, facets, persons, recent, bookmarks, onCo
           <div>
             <h1>{t.welcome}</h1>
             <p>{t.tagline}</p>
+            {!empty && (
+              <div className="hero-actions">
+                <button className="btn ghost" onClick={onTree} title={t.treeViewHint}>
+                  <Network size={15} /> {t.treeView}
+                </button>
+                <button className="btn ghost" onClick={onTimeline} title={t.timelineHint}>
+                  <Clock3 size={15} /> {t.timeline}
+                </button>
+              </div>
+            )}
           </div>
         </header>
 
@@ -70,6 +85,8 @@ export function Home({ t, lang, status, facets, persons, recent, bookmarks, onCo
             </button>
           </div>
         )}
+
+        {!empty && <Calendar t={t} lang={lang} reload={reload} onPerson={onPerson} />}
 
         {top.length > 0 && top[0].docs > 1 && (
           <section>

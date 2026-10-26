@@ -1,6 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod backup;
+mod calendar;
 mod db;
+mod export;
 mod extract;
 mod fold;
 mod import;
@@ -29,6 +32,8 @@ struct AppState {
     conn: Mutex<Connection>,
     /// an import or a search-table rebuild is running
     busy: Arc<AtomicBool>,
+    /// an automatic backup copy is being made
+    backing_up: Arc<AtomicBool>,
     /// the database could not be opened (e.g. it belongs to a newer version)
     startup_error: Option<String>,
 }
@@ -348,14 +353,192 @@ async fn export_doc(state: State<'_, AppState>, doc_id: i64, path: String) -> Cm
     std::fs::write(&path, format!("# {}\n\n{}\n", doc.title, body)).map_err(err)
 }
 
-/// A complete copy of the database (everything is inside it).
+/// A complete copy of the database (everything is inside it). Made on its
+/// own connection so the program keeps answering meanwhile.
 #[tauri::command]
 async fn backup(state: State<'_, AppState>, path: String) -> CmdResult<()> {
-    if Path::new(&path).exists() {
-        std::fs::remove_file(&path).map_err(err)?;
+    let conn = db::open(&state.db_path).map_err(err)?;
+    backup::copy_to(&conn, Path::new(&path))
+}
+
+// ---------------------------------------------------------------- backup copies
+
+#[tauri::command]
+async fn backup_settings(state: State<'_, AppState>) -> CmdResult<backup::Settings> {
+    Ok(backup::settings(&state.conn.lock().unwrap()))
+}
+
+#[tauri::command]
+async fn set_backup_settings(state: State<'_, AppState>, days: u32, keep: u32) -> CmdResult<()> {
+    backup::set_settings(&state.conn.lock().unwrap(), days, keep)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Copies {
+    dir: String,
+    copies: Vec<backup::Copy>,
+}
+
+#[tauri::command]
+async fn list_copies(state: State<'_, AppState>) -> CmdResult<Copies> {
+    Ok(Copies {
+        dir: backup::copies_dir(&state.db_path).to_string_lossy().to_string(),
+        copies: backup::list_copies(&state.db_path),
+    })
+}
+
+/// A copy now, into the copies folder.
+#[tauri::command]
+async fn backup_now(state: State<'_, AppState>) -> CmdResult<String> {
+    let conn = db::open(&state.db_path).map_err(err)?;
+    let stamp: String = conn
+        .query_row("SELECT strftime('%Y-%m-%d %H%M', 'now', 'localtime')", [], |r| r.get(0))
+        .map_err(err)?;
+    let target = backup::copies_dir(&state.db_path).join(format!("Bio-Data {stamp}.db"));
+    backup::copy_to(&conn, &target)?;
+    Ok(target.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+async fn delete_copy(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    backup::delete_copy(&state.db_path, &path)
+}
+
+/// Replaces everything with the copy at `path` (what there was is kept as a
+/// copy first). The page reloads afterwards.
+#[tauri::command]
+async fn restore_copy(app: AppHandle, state: State<'_, AppState>, path: String) -> CmdResult<String> {
+    let src = PathBuf::from(&path);
+    if src == state.db_path {
+        return Err("Ese archivo es la base de datos en uso".into());
     }
-    let conn = state.conn.lock().unwrap();
-    conn.execute("VACUUM INTO ?1", [&path]).map(|_| ()).map_err(err)
+    backup::check_copy(&src)?;
+    if state.backing_up.load(Ordering::SeqCst) {
+        return Err("Se está haciendo una copia automática; prueba dentro de un momento.".into());
+    }
+    if state.busy.swap(true, Ordering::SeqCst) {
+        return Err("Hay una importación en marcha; espera a que termine.".into());
+    }
+    let result = (|| {
+        let mut guard = state.conn.lock().unwrap();
+        let old = std::mem::replace(&mut *guard, Connection::open_in_memory().map_err(err)?);
+        let (conn, r) = backup::restore(old, &state.db_path, &src);
+        *guard = conn;
+        let safety = r?;
+        let stale = db::init(&guard)?;
+        Ok::<_, String>((safety, stale))
+    })();
+    state.busy.store(false, Ordering::SeqCst);
+    let (safety, stale) = result?;
+    if stale {
+        start_rebuild(&app)?;
+    }
+    Ok(safety.to_string_lossy().to_string())
+}
+
+// ---------------------------------------------------------------- calendar, labels, pictures
+
+/// The next `count` days from y-m-d (the page's local date), with their lunar
+/// day and the appearances / disappearances on each.
+#[tauri::command]
+async fn upcoming(state: State<'_, AppState>, y: i32, m: u32, d: u32, count: i64) -> CmdResult<Vec<calendar::CalDay>> {
+    calendar::upcoming(&state.conn.lock().unwrap(), y, m, d, count.clamp(1, 400)).map_err(err)
+}
+
+#[tauri::command]
+async fn timeline(state: State<'_, AppState>) -> CmdResult<Vec<calendar::LifeSpan>> {
+    calendar::timeline(&state.conn.lock().unwrap()).map_err(err)
+}
+
+/// Everything out as Markdown files into `dir` (in the background).
+#[tauri::command]
+async fn export_markdown(app: AppHandle, dir: String) -> CmdResult<()> {
+    background(&app, move |conn, app| {
+        let (persons, docs) = export::export_all(conn, Path::new(&dir), |done, total| {
+            let _ = app.emit("import-progress", import::Progress { phase: "export", done, total });
+        })?;
+        let _ = app.emit("export-done", (persons, docs, dir.clone()));
+        Ok(())
+    })
+}
+
+/// One record with all its texts as a single Markdown file.
+#[tauri::command]
+async fn export_person(state: State<'_, AppState>, id: i64, path: String) -> CmdResult<()> {
+    export::export_person(&state.conn.lock().unwrap(), id, Path::new(&path))
+}
+
+/// Replaces the imported calendar with an .ics file (the user's Vaiṣṇava calendar).
+#[tauri::command]
+async fn import_calendar(state: State<'_, AppState>, path: String) -> CmdResult<usize> {
+    let bytes = std::fs::read(&path).map_err(err)?;
+    calendar::import_ics(&mut state.conn.lock().unwrap(), &text::decode(&bytes))
+}
+
+#[tauri::command]
+async fn calendar_info(state: State<'_, AppState>) -> CmdResult<calendar::CalendarInfo> {
+    calendar::calendar_info(&state.conn.lock().unwrap()).map_err(err)
+}
+
+#[tauri::command]
+async fn clear_calendar(state: State<'_, AppState>) -> CmdResult<()> {
+    state.conn.lock().unwrap().execute("DELETE FROM calendar_events", []).map(|_| ()).map_err(err)
+}
+
+/// The lunar day a field's text is read as (for the record form).
+#[tauri::command]
+async fn lunar_label(text: String) -> CmdResult<Option<String>> {
+    Ok(calendar::parse_day(&text).map(calendar::label))
+}
+
+#[tauri::command]
+async fn list_tags(state: State<'_, AppState>) -> CmdResult<Vec<(String, i64)>> {
+    store::list_tags(&state.conn.lock().unwrap())
+}
+
+#[tauri::command]
+async fn add_person_images(state: State<'_, AppState>, id: i64, paths: Vec<String>) -> CmdResult<usize> {
+    store::add_person_images(&mut state.conn.lock().unwrap(), id, &paths)
+}
+
+#[tauri::command]
+async fn remove_person_image(state: State<'_, AppState>, image_id: i64) -> CmdResult<()> {
+    store::remove_person_image(&state.conn.lock().unwrap(), image_id)
+}
+
+#[tauri::command]
+async fn image_as_photo(state: State<'_, AppState>, image_id: i64) -> CmdResult<()> {
+    store::image_as_photo(&mut state.conn.lock().unwrap(), image_id)
+}
+
+// ---------------------------------------------------------------- tidying up
+
+#[tauri::command]
+async fn review_docs(state: State<'_, AppState>) -> CmdResult<store::Review> {
+    store::review(&state.conn.lock().unwrap())
+}
+
+#[tauri::command]
+async fn mark_distinct(state: State<'_, AppState>, ids: Vec<i64>) -> CmdResult<()> {
+    store::mark_distinct(&mut state.conn.lock().unwrap(), &ids)
+}
+
+#[tauri::command]
+async fn list_distinct(state: State<'_, AppState>) -> CmdResult<Vec<(i64, i64)>> {
+    store::list_distinct(&state.conn.lock().unwrap())
+}
+
+// ---------------------------------------------------------------- earlier versions
+
+#[tauri::command]
+async fn list_versions(state: State<'_, AppState>, kind: String, target: i64) -> CmdResult<Vec<store::Version>> {
+    store::list_versions(&state.conn.lock().unwrap(), &kind, target)
+}
+
+#[tauri::command]
+async fn restore_version(state: State<'_, AppState>, id: i64) -> CmdResult<()> {
+    store::restore_version(&mut state.conn.lock().unwrap(), id)
 }
 
 #[tauri::command]
@@ -394,14 +577,15 @@ fn serve_file(app: &AppHandle, uri: &str) -> tauri::http::Response<Vec<u8>> {
     let (Some(role), Some(id)) = (parts.next(), parts.next().and_then(|s| s.parse::<i64>().ok())) else {
         return not_found();
     };
-    if role != "cover" && role != "original" && role != "photo" {
+    if !["cover", "original", "photo", "image"].contains(&role) {
         return not_found();
     }
     let state = app.state::<AppState>();
     let Ok(conn) = state.conn.lock() else { return not_found() };
-    if role == "photo" {
+    if role == "photo" || role == "image" {
         // can change at any time: never cached
-        return match search::get_photo(&conn, id) {
+        let found = if role == "photo" { search::get_photo(&conn, id) } else { search::get_image(&conn, id) };
+        return match found {
             Ok(Some((mime, data))) => tauri::http::Response::builder()
                 .header("Content-Type", mime)
                 .header("Cache-Control", "no-store")
@@ -428,7 +612,9 @@ fn main() {
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
-            let db_path = dir.join("biodata.db");
+            // BIO_DB (only in development builds) points at a test copy instead
+            let test_db = cfg!(debug_assertions).then(|| std::env::var_os("BIO_DB")).flatten();
+            let db_path = test_db.map(PathBuf::from).unwrap_or_else(|| dir.join("biodata.db"));
             let conn = db::open(&db_path)?;
             // A database problem is shown in the window instead of closing silently.
             let init = db::init(&conn);
@@ -440,6 +626,8 @@ fn main() {
             if first_run {
                 db::set_meta(&conn, "initial_import", "1")?;
                 db::set_meta(&conn, "callouts_cleaned", "1")?; // the import cleans them
+                db::set_meta(&conn, "titles_tidied", "1")?; // and tidies the titles
+                db::set_meta(&conn, "keys_v2", "1")?;
             }
             let mut conn = conn;
             if startup_error.is_none() && db::get_meta(&conn, "callouts_cleaned")?.is_none() {
@@ -452,13 +640,44 @@ fn main() {
                 store::clean_callouts(&mut conn)?;
                 db::set_meta(&conn, "callouts_cleaned", "1")?;
             }
+            if startup_error.is_none() && db::get_meta(&conn, "titles_tidied")?.is_none() {
+                // one-time: titles of old Word files imported before (a few rows)
+                store::tidy_doc_titles(&mut conn)?;
+                db::set_meta(&conn, "titles_tidied", "1")?;
+            }
+            if startup_error.is_none() && db::get_meta(&conn, "keys_v2")?.is_none() {
+                // "Srimad …" names: their keys now leave the honorific out
+                store::refresh_person_keys(&mut conn)?;
+                db::set_meta(&conn, "keys_v2", "1")?;
+            }
             if startup_error.is_none() {
                 let _ = seed_parampara_once(&mut conn);
+            }
+            let backing_up = Arc::new(AtomicBool::new(false));
+            if startup_error.is_none() && !first_run {
+                // the automatic copy, a little after starting so the window opens fast
+                let (path, flag, handle) = (db_path.clone(), backing_up.clone(), app.handle().clone());
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(20));
+                    flag.store(true, Ordering::SeqCst);
+                    let made = backup::auto_backup(&path);
+                    flag.store(false, Ordering::SeqCst);
+                    match made {
+                        Ok(Some(p)) => {
+                            let _ = handle.emit("backup-done", p.to_string_lossy().to_string());
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            let _ = handle.emit("import-error", format!("Copia automática: {e}"));
+                        }
+                    }
+                });
             }
             app.manage(AppState {
                 db_path,
                 conn: Mutex::new(conn),
                 busy: Arc::new(AtomicBool::new(false)),
+                backing_up,
                 startup_error,
             });
             if first_run {
@@ -518,6 +737,29 @@ fn main() {
             open_original,
             export_doc,
             backup,
+            backup_settings,
+            set_backup_settings,
+            list_copies,
+            backup_now,
+            delete_copy,
+            restore_copy,
+            list_versions,
+            restore_version,
+            upcoming,
+            lunar_label,
+            import_calendar,
+            timeline,
+            export_markdown,
+            export_person,
+            calendar_info,
+            clear_calendar,
+            list_tags,
+            add_person_images,
+            remove_person_image,
+            image_as_photo,
+            review_docs,
+            mark_distinct,
+            list_distinct,
             open_external,
             path_kinds
         ])

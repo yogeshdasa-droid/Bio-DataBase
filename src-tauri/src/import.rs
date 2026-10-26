@@ -243,13 +243,16 @@ fn is_dos_name(stem: &str) -> bool {
 }
 
 /// First line of the text, as a title, when it looks like one.
+/// The author's line ("by Sri …") is skipped.
 fn first_line_title(text: &str) -> Option<String> {
-    let line = text.lines().map(str::trim).find(|l| !l.is_empty())?;
-    let t = text::plain(line);
-    let t = t.trim_matches(|c: char| !c.is_alphanumeric()).to_string();
-    let n = t.chars().count();
-    let letters = t.chars().filter(|c| c.is_alphabetic()).count();
-    ((6..=90).contains(&n) && letters * 10 >= n * 7).then_some(t)
+    text.lines().map(str::trim).filter(|l| !l.is_empty()).take(4).find_map(|line| {
+        let t = text::tidy_doc_title(&text::plain(line));
+        let t = t.trim_matches(|c: char| !c.is_alphanumeric()).to_string();
+        let n = t.chars().count();
+        let letters = t.chars().filter(|c| c.is_alphabetic()).count();
+        let byline = t.to_lowercase().starts_with("by ");
+        ((6..=90).contains(&n) && letters * 10 >= n * 7 && !byline).then_some(t)
+    })
 }
 
 fn parse(mut item: Item) -> Result<Parsed, String> {
@@ -417,6 +420,20 @@ pub fn run(conn: &mut Connection, opts: &Options, progress: impl Fn(Progress)) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn first_lines() {
+        assert_eq!(first_line_title("ÃTHE ACCEPTANCE OF THE HOLY NAME
+
+All glories").as_deref(), Some("THE ACCEPTANCE OF THE HOLY NAME"));
+        assert_eq!(first_line_title("Çréla Raghunätha däsa Goswämé’s
+
+text").as_deref(), Some("Śrīla Raghunātha dāsa Goswāmī’s"));
+        assert_eq!(first_line_title("Áby Sri Gopijanavallabha dasa
+Ð
+
+Glory to Syamananda").as_deref(), Some("Glory to Syamananda"));
+    }
 
     #[test]
     fn book_titles() {

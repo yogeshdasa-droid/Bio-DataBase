@@ -12,6 +12,8 @@ export interface SearchParams {
   dir: string | null;
   docId: number | null;
   personId: number | null;
+  paramparaOnly?: boolean;
+  kinds?: string[];
   offset: number;
   limit: number;
 }
@@ -100,6 +102,8 @@ export interface PersonFields {
   disciples: string;
   works: string;
   notes: string;
+  /** labels, comma separated */
+  tags: string;
 }
 
 export const EMPTY_PERSON: PersonFields = {
@@ -112,6 +116,7 @@ export const EMPTY_PERSON: PersonFields = {
   disciples: "",
   works: "",
   notes: "",
+  tags: "",
 };
 
 export interface PersonListItem {
@@ -123,6 +128,8 @@ export interface PersonListItem {
   hasPhoto: boolean;
   /** place in the Guru Paramparā; null = "Other Vaiṣṇavas" */
   tree: { parent: number | null; pos: number } | null;
+  /** labels, comma separated */
+  tags: string;
 }
 
 /** Where a record goes in the Guru Paramparā (null = take it out). */
@@ -142,7 +149,48 @@ export interface Person extends PersonFields {
   created: string;
   modified: string;
   hasPhoto: boolean;
+  /** gallery pictures (served at /image/<id>) */
+  images: number[];
+  /** lunar days read from the appearance / disappearance fields */
+  appearanceDay: string | null;
+  disappearanceDay: string | null;
   docs: PersonDoc[];
+}
+
+export interface CalDay {
+  /** YYYY-MM-DD */
+  date: string;
+  labels: string[];
+  events: CalEvent[];
+}
+
+export interface CalEvent {
+  personId: number | null;
+  /** the record's name, or the event as the calendar says it */
+  name: string;
+  kind: "appearance" | "disappearance" | "ekadasi" | "parana" | "festival";
+  hasPhoto: boolean;
+  /** the calendar's note ("Fast till noon…") */
+  note: string;
+  /** worked out by the program (not in the imported calendar) */
+  computed: boolean;
+}
+
+export interface LifeSpan {
+  id: number;
+  name: string;
+  born: number | null;
+  died: number | null;
+  parampara: boolean;
+  hasPhoto: boolean;
+}
+
+export interface CalendarInfo {
+  count: number;
+  from: string | null;
+  to: string | null;
+  /** people named in the calendar that no record matches */
+  unmatched: string[];
 }
 
 export interface DocMeta {
@@ -188,7 +236,7 @@ export interface ImportOptions {
 }
 
 export interface ImportProgress {
-  phase: "scan" | "import" | "fts" | "done";
+  phase: "scan" | "import" | "fts" | "export" | "done";
   done: number;
   total: number;
 }
@@ -199,6 +247,42 @@ export interface ImportSummary {
   persons: number;
   failed: string[];
   millis: number;
+}
+
+export interface BackupSettings {
+  /** 0 = never */
+  days: number;
+  keep: number;
+  /** seconds since 1970 of the last automatic copy (0 = none) */
+  last: number;
+}
+
+export interface BackupCopy {
+  path: string;
+  name: string;
+  size: number;
+  /** seconds since 1970 */
+  modified: number;
+  auto: boolean;
+}
+
+/** An earlier state of a text or a record. */
+export interface Version {
+  id: number;
+  label: string;
+  saved: string;
+  /** doc: JSON list of {heading, text}; person: JSON of PersonFields */
+  data: string;
+}
+
+export interface ReviewDoc {
+  id: number;
+  title: string;
+  collection: string;
+  kind: string;
+  size: number;
+  person: string | null;
+  hasOriginal: boolean;
 }
 
 export const api = {
@@ -244,11 +328,35 @@ export const api = {
   openOriginal: (docId: number) => invoke<void>("open_original", { docId }),
   exportDoc: (docId: number, path: string) => invoke<void>("export_doc", { docId, path }),
   backup: (path: string) => invoke<void>("backup", { path }),
+  backupSettings: () => invoke<BackupSettings>("backup_settings"),
+  setBackupSettings: (days: number, keep: number) => invoke<void>("set_backup_settings", { days, keep }),
+  listCopies: () => invoke<{ dir: string; copies: BackupCopy[] }>("list_copies"),
+  backupNow: () => invoke<string>("backup_now"),
+  deleteCopy: (path: string) => invoke<void>("delete_copy", { path }),
+  /** returns the copy kept of what there was before */
+  restoreCopy: (path: string) => invoke<string>("restore_copy", { path }),
+  listVersions: (kind: "doc" | "person", target: number) => invoke<Version[]>("list_versions", { kind, target }),
+  restoreVersion: (id: number) => invoke<void>("restore_version", { id }),
+  upcoming: (date: Date, count: number) =>
+    invoke<CalDay[]>("upcoming", { y: date.getFullYear(), m: date.getMonth() + 1, d: date.getDate(), count }),
+  lunarLabel: (text: string) => invoke<string | null>("lunar_label", { text }),
+  importCalendar: (path: string) => invoke<number>("import_calendar", { path }),
+  calendarInfo: () => invoke<CalendarInfo>("calendar_info"),
+  clearCalendar: () => invoke<void>("clear_calendar"),
+  timeline: () => invoke<LifeSpan[]>("timeline"),
+  exportMarkdown: (dir: string) => invoke<void>("export_markdown", { dir }),
+  exportPerson: (id: number, path: string) => invoke<void>("export_person", { id, path }),
+  addPersonImages: (id: number, paths: string[]) => invoke<number>("add_person_images", { id, paths }),
+  removePersonImage: (imageId: number) => invoke<void>("remove_person_image", { imageId }),
+  imageAsPhoto: (imageId: number) => invoke<void>("image_as_photo", { imageId }),
+  reviewDocs: () => invoke<{ empty: ReviewDoc[]; oddTitles: ReviewDoc[] }>("review_docs"),
+  markDistinct: (ids: number[]) => invoke<void>("mark_distinct", { ids }),
+  listDistinct: () => invoke<[number, number][]>("list_distinct"),
   openExternal: (target: string) => invoke<void>("open_external", { target }),
 };
 
 /** URL of a file stored in the database (cover image, original PDF, or a record's picture by person id). */
-export function fileUrl(role: "cover" | "original" | "photo", docId: number): string {
+export function fileUrl(role: "cover" | "original" | "photo" | "image", docId: number): string {
   return navigator.userAgent.includes("Windows") ? `http://bio.localhost/${role}/${docId}` : `bio://localhost/${role}/${docId}`;
 }
 

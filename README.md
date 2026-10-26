@@ -7,6 +7,8 @@ A diferencia de GaudiyaDB, Bio-Data es **autosuficiente**: al importar, el texto
 y los PDF / Word originales se copian **dentro de la base de datos**. Después las carpetas de
 origen ya no hacen falta, y todo se edita desde la app.
 
+![Novedades de la versión 0.3.0](docs/novedades-0.3.0.gif)
+
 ## Qué hace
 
 - **Fichas de personas**: nombre, otros nombres, aparición, desaparición, lugar, guru,
@@ -24,8 +26,16 @@ origen ya no hacen falta, y todo se edita desde la app.
 - Los **nombres** de otras fichas que aparecen en un texto son enlaces a su ficha.
 - **Imagen** propia para cada ficha; una ficha con un solo texto lo muestra directamente.
 - **Atrás / Adelante** como en un navegador (`Alt+←/→`).
-- **Edición** del texto y los datos; **papelera** con recuperación; **copia de seguridad**
-  de todo en un solo archivo.
+- **Edición** del texto y los datos; **papelera** con recuperación; **versiones anteriores**
+  de cada texto y ficha para deshacer cambios.
+- **Copias de seguridad automáticas** (todo está en un solo archivo) y **restaurar** desde Ajustes.
+- **Guru Paramparā** como árbol (arrastrar para ordenar, y dibujada) y **línea de tiempo**.
+- **Calendario vaiṣṇava**: hoy y los próximos días con las apariciones y desapariciones de las
+  fichas, Ekādaśī y festivales. Importa tu calendario Gauḍīya (`.ics`); lo que no está en él se
+  calcula (tithi al amanecer en Śrī Māyāpur).
+- **Etiquetas**, **galería de imágenes**, ayudante para **unir fichas repetidas**.
+- **Exportar** todo a Markdown (para Obsidian) o una ficha con sus textos; imprimir una ficha.
+- Avisa cuando hay una **versión nueva**.
 - Español / inglés, tema claro / oscuro.
 
 ## Descargar

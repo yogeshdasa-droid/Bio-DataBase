@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, FilePen, FolderInput, GitMerge, Search, Trash2, Upload, UserPlus, UserRound, X } from "lucide-react";
-import { api, DocInfo, EMPTY_PERSON, Person, PersonFields, PersonListItem, SectionText } from "../api";
+import { AlertTriangle, FilePen, FolderInput, GitMerge, History, Search, Trash2, Undo2, Upload, UserPlus, UserRound, X } from "lucide-react";
+import { api, DocInfo, EMPTY_PERSON, Person, PersonFields, PersonListItem, SectionText, Version } from "../api";
 import { T } from "../i18n";
 import { Modal } from "./ui";
 import { foldName } from "./Sidebar";
@@ -344,6 +344,18 @@ export function ImportDialog({
 
 // ---------------------------------------------------------------- person record
 
+/** The lunar day the program reads in a date field (for the calendar). */
+function LunarHint({ t, text }: { t: T; text: string }) {
+  const [label, setLabel] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!text.trim()) return setLabel(undefined);
+    const h = window.setTimeout(() => api.lunarLabel(text).then(setLabel, () => setLabel(undefined)), 250);
+    return () => window.clearTimeout(h);
+  }, [text]);
+  if (label === undefined) return null;
+  return <em className={`lunar-hint ${label ? "ok" : ""}`}>{label ? t.lunarRead(label) : t.lunarNone}</em>;
+}
+
 export function PersonDialog({
   t,
   person,
@@ -382,10 +394,11 @@ export function PersonDialog({
   };
   useCtrlS(dirty && !busy && !!f.name.trim(), save);
 
-  const field = (k: keyof PersonFields, label: string, hint?: string) => (
+  const field = (k: keyof PersonFields, label: string, hint?: string, below?: React.ReactNode) => (
     <label>
       <span>{label}</span>
       <input value={f[k]} placeholder={hint} onChange={set(k)} />
+      {below}
     </label>
   );
 
@@ -413,19 +426,123 @@ export function PersonDialog({
           <input value={f.name} onChange={set("name")} autoFocus={!person} />
         </label>
         {field("aka", t.aka, t.akaHint)}
-        {field("appearance", t.appearance)}
-        {field("disappearance", t.disappearance)}
+        {field("appearance", t.appearance, undefined, <LunarHint t={t} text={f.appearance} />)}
+        {field("disappearance", t.disappearance, undefined, <LunarHint t={t} text={f.disappearance} />)}
         {field("place", t.place)}
         {field("guru", t.guru, t.listHint)}
       </div>
       <div className="form-grid one">
         {field("disciples", t.disciples, t.listHint)}
         {field("works", t.works, t.listHint)}
+        {field("tags", t.tags, t.tagsHint)}
         <label>
           <span>{t.notes}</span>
           <textarea className="notes-editor" value={f.notes} onChange={set("notes")} />
         </label>
       </div>
+      {error && <div className="error-box">{error}</div>}
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------- earlier versions
+
+/** Readable text of a version: the text itself, or the record's fields. */
+function versionText(t: T, kind: "doc" | "person", data: string): string {
+  try {
+    if (kind === "doc") return (JSON.parse(data) as { text: string }[]).map((s) => s.text.trimEnd()).join("\n\n");
+    const f = JSON.parse(data) as PersonFields;
+    const rows: [string, string][] = [
+      [t.name, f.name],
+      [t.aka, f.aka],
+      [t.appearance, f.appearance],
+      [t.disappearance, f.disappearance],
+      [t.place, f.place],
+      [t.guru, f.guru],
+      [t.disciples, f.disciples],
+      [t.works, f.works],
+      [t.tags, f.tags],
+      [t.notes, f.notes],
+    ];
+    return rows
+      .filter(([, v]) => v?.trim())
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("\n\n");
+  } catch {
+    return data;
+  }
+}
+
+export function VersionsDialog({
+  t,
+  kind,
+  target,
+  label,
+  onClose,
+  onRestored,
+}: {
+  t: T;
+  kind: "doc" | "person";
+  target: number;
+  label: string;
+  onClose: () => void;
+  onRestored: () => void;
+}) {
+  const [list, setList] = useState<Version[] | null>(null);
+  const [sel, setSel] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.listVersions(kind, target).then(setList, (e) => setError(String(e)));
+  }, [kind, target]);
+  const cur = list?.[sel];
+  const text = useMemo(() => (cur ? versionText(t, kind, cur.data) : ""), [cur, kind, t]);
+
+  const restore = async () => {
+    if (!cur || !window.confirm(t.restoreVersionConfirm)) return;
+    setBusy(true);
+    try {
+      await api.restoreVersion(cur.id);
+      onRestored();
+    } catch (e) {
+      setError(String(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      wide
+      title={t.versionsTitle(label)}
+      icon={<History size={18} />}
+      onClose={onClose}
+      footer={
+        <>
+          <span className="muted small grow">{t.versionsHint}</span>
+          <button className="btn ghost" onClick={onClose}>
+            {t.close}
+          </button>
+          <button className="btn" disabled={!cur || busy} onClick={restore}>
+            {busy ? <span className="spinner light" /> : <Undo2 size={15} />} {t.restoreVersion}
+          </button>
+        </>
+      }
+    >
+      {list && list.length === 0 ? (
+        <p className="muted">{t.noVersions}</p>
+      ) : (
+        <div className="versions">
+          <div className="version-list">
+            {list?.map((v, i) => (
+              <button key={v.id} className={i === sel ? "on" : ""} onClick={() => setSel(i)}>
+                <strong>{v.saved}</strong>
+                {v.label !== label && <em>{v.label}</em>}
+              </button>
+            ))}
+          </div>
+          <pre className="version-text">{text}</pre>
+        </div>
+      )}
       {error && <div className="error-box">{error}</div>}
     </Modal>
   );

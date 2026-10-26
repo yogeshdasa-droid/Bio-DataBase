@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
-import { BookOpen, FilePlus2, FileText, GitMerge, ImagePlus, MoreHorizontal, Pencil, Search, TextSearch, Trash2, UserRound, X } from "lucide-react";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { BookOpen, FileDown, FilePlus2, Printer, FileText, GitMerge, History, ImagePlus, Images, MoreHorizontal, Pencil, Search, TextSearch, Trash2, UserRound, X } from "lucide-react";
 import { api, fileUrl, Person, PersonListItem, SectionText } from "../api";
 import { formatSize, Lang, T } from "../i18n";
 import { CollectionChip } from "./ui";
@@ -34,6 +34,8 @@ interface Props {
   onEdit: (p: Person) => void;
   onMerge: (p: Person, suggested: number[]) => void;
   onDelete: (p: Person) => void;
+  onVersions: (p: Person) => void;
+  onTag: (tag: string) => void;
   onAddText: (p: Person) => void;
   onFindMentions: (p: Person) => void;
   onSearchIn: (p: Person) => void;
@@ -54,6 +56,7 @@ export function PersonView(p: Props) {
   const { t, lang } = p;
   const [person, setPerson] = useState<Person | null>(null);
   const [menu, setMenu] = useState(false);
+  const [zoom, setZoom] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,14 +77,19 @@ export function PersonView(p: Props) {
     return () => window.removeEventListener("click", close);
   }, [menu]);
 
-  // folded name → id, to turn names written in the fields into links
+  // folded name → id, to turn names written in the fields into links; the
+  // name without titles ("Rupa" = "Rupa Gosvami") when only one record has it
   const byName = useMemo(() => {
     const m = new Map<string, number>();
+    const cores = new Map<string, number | null>();
     for (const x of p.persons) {
-      m.set(foldName(x.name), x.id);
-      for (const a of x.aka.split(",")) if (a.trim()) m.set(foldName(a), x.id);
+      for (const n of [x.name, ...x.aka.split(",")].map((s) => s.trim()).filter(Boolean)) {
+        m.set(foldName(n), x.id);
+        const c = coreName(n);
+        if (c) cores.set(c, cores.has(c) && cores.get(c) !== x.id ? null : x.id);
+      }
     }
-    return m;
+    return (name: string) => m.get(foldName(name)) ?? cores.get(coreName(name)) ?? undefined;
   }, [p.persons]);
 
   const similar = useMemo(() => {
@@ -153,33 +161,80 @@ export function PersonView(p: Props) {
     if (!window.confirm(t.removePhotoConfirm)) return;
     api.removePersonPhoto(person.id).then(p.onPhotoChanged, (e) => p.onToast(String(e)));
   };
-  const names = (value: string) =>
-    value
+  // guru and disciples: the names written in the record, plus those of the Guru Paramparā
+  const me = p.persons.find((x) => x.id === person.id);
+  const treeGuru = p.persons.filter((x) => me?.tree?.parent != null && x.id === me.tree.parent);
+  const treeDisciples = p.persons.filter((x) => x.tree?.parent === person.id).sort((a, b) => a.tree!.pos - b.tree!.pos);
+  type Name = { text: string; id?: number; tree?: boolean };
+  // "Rupa Gosvami (diksa); studied under…" links to Rupa Gosvami
+  const nameKey = (s: string) => s.replace(/\([^)]*\)/g, "").split(/[;:]/)[0].trim();
+  const nameList = (value: string, fromTree: PersonListItem[]): Name[] => {
+    const out: Name[] = value
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean)
-      .map((s, i) => {
-        const id = byName.get(foldName(s));
-        return id && id !== person.id ? (
-          <button key={i} className="name-link" onClick={() => p.onPerson(id)}>
-            {s}
-          </button>
-        ) : (
-          <span key={i} className="name-plain">
-            {s}
-          </span>
-        );
-      });
+      .map((text) => ({ text, id: byName(nameKey(text)) }));
+    // the Guru Paramparā only fills in what the record does not say
+    if (!out.length) for (const x of fromTree) out.push({ text: x.name, id: x.id, tree: true });
+    return out;
+  };
+  const names = (list: Name[]) =>
+    list.map((n, i) =>
+      n.id && n.id !== person.id ? (
+        <button key={i} className={`name-link${n.tree ? " from-tree" : ""}`} title={n.tree ? t.fromParampara : undefined} onClick={() => p.onPerson(n.id!)}>
+          {n.text}
+        </button>
+      ) : (
+        <span key={i} className="name-plain">
+          {n.text}
+        </span>
+      ),
+    );
+  const dated = (value: string, lunar: string | null) => (
+    <>
+      {value}
+      {lunar && <span className="lunar">{lunar}</span>}
+    </>
+  );
+  const gurus = nameList(person.guru, treeGuru);
+  const disciples = nameList(person.disciples, treeDisciples);
 
-  const facts: [string, string, boolean][] = [
-    [t.appearance, person.appearance, false],
-    [t.disappearance, person.disappearance, false],
-    [t.place, person.place, false],
-    [t.guru, person.guru, true],
-    [t.disciples, person.disciples, true],
-    [t.works, person.works, false],
+  const facts: [string, React.ReactNode, boolean][] = [
+    [t.appearance, dated(person.appearance, person.appearanceDay), !!person.appearance.trim()],
+    [t.disappearance, dated(person.disappearance, person.disappearanceDay), !!person.disappearance.trim()],
+    [t.place, person.place, !!person.place.trim()],
+    [t.guru, names(gurus), gurus.length > 0],
+    [t.disciples, names(disciples), disciples.length > 0],
+    [t.works, person.works, !!person.works.trim()],
   ];
-  const hasFacts = facts.some(([, v]) => v.trim()) || person.notes.trim();
+  const hasFacts = facts.some(([, , show]) => show) || person.notes.trim();
+  const tags = person.tags
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const addImages = async () => {
+    try {
+      const picked = await open({ multiple: true, filters: [{ name: t.imageFiles, extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp", "avif"] }] });
+      const paths = Array.isArray(picked) ? picked : typeof picked === "string" ? [picked] : [];
+      if (!paths.length) return;
+      await api.addPersonImages(person.id, paths);
+      p.onPhotoChanged();
+    } catch (e) {
+      p.onToast(String(e));
+    }
+  };
+  const exportMe = async () => {
+    try {
+      const path = await save({ defaultPath: `${person.name.replace(/[\\/:*?"<>|]/g, "-")}.md`, filters: [{ name: "Markdown", extensions: ["md"] }] });
+      if (!path) return;
+      await api.exportPerson(person.id, path);
+      p.onToast(t.exported);
+    } catch (e) {
+      p.onToast(String(e));
+    }
+  };
+  const imageAction = (f: () => Promise<unknown>) => () => f().then(p.onPhotoChanged, (e) => p.onToast(String(e)));
 
   return (
     <div className="reader person-view">
@@ -209,6 +264,15 @@ export function PersonView(p: Props) {
             <div className="person-title">
               <h1>{person.name}</h1>
               {person.aka && <div className="aka">{person.aka}</div>}
+              {tags.length > 0 && (
+                <div className="tags">
+                  {tags.map((tg) => (
+                    <button key={tg} className="tag clickable" title={t.byTag(tg)} onClick={() => p.onTag(tg)}>
+                      #{tg}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="person-actions">
                 <button className="btn" onClick={() => p.onEdit(person)}>
                   <Pencil size={15} /> {t.editPerson}
@@ -238,6 +302,15 @@ export function PersonView(p: Props) {
                       <button onClick={() => (setMenu(false), p.onMerge(person, similar.map((s) => s.id)))}>
                         <GitMerge size={15} /> {t.mergePersons}
                       </button>
+                      <button onClick={() => (setMenu(false), p.onVersions(person))}>
+                        <History size={15} /> {t.versions}
+                      </button>
+                      <button onClick={() => (setMenu(false), exportMe())}>
+                        <FileDown size={15} /> {t.exportPerson}
+                      </button>
+                      <button onClick={() => (setMenu(false), window.setTimeout(() => window.print(), 50))}>
+                        <Printer size={15} /> {t.printPerson}
+                      </button>
                       <hr />
                       <button className="danger" onClick={() => (setMenu(false), p.onDelete(person))}>
                         <Trash2 size={15} /> {t.deletePerson}
@@ -252,11 +325,11 @@ export function PersonView(p: Props) {
           {hasFacts ? (
             <dl className="facts">
               {facts
-                .filter(([, v]) => v.trim())
-                .map(([label, value, linked]) => (
+                .filter(([, , show]) => show)
+                .map(([label, value]) => (
                   <div key={label}>
                     <dt>{label}</dt>
-                    <dd>{linked ? names(value) : value}</dd>
+                    <dd>{value}</dd>
                   </div>
                 ))}
               {person.notes.trim() && (
@@ -360,6 +433,37 @@ export function PersonView(p: Props) {
           </section>
           )}
 
+          <section>
+            <h2>
+              <Images size={14} /> {t.gallery} {person.images.length > 0 && <span className="pill">{person.images.length}</span>}
+            </h2>
+            <div className="gallery">
+              {person.images.map((id) => (
+                <figure key={id}>
+                  <a href={fileUrl("image", id)} target="_blank" rel="noreferrer" onClick={(e) => (e.preventDefault(), setZoom(id))}>
+                    <img src={fileUrl("image", id)} alt="" loading="lazy" />
+                  </a>
+                  <figcaption>
+                    <button className="icon-btn" title={t.useAsMain} onClick={imageAction(() => api.imageAsPhoto(id))}>
+                      <UserRound size={14} />
+                    </button>
+                    <button
+                      className="icon-btn danger"
+                      title={t.removeImage}
+                      onClick={() => window.confirm(t.removeImageConfirm) && imageAction(() => api.removePersonImage(id))()}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </figcaption>
+                </figure>
+              ))}
+              <button className="gallery-add" onClick={addImages}>
+                <ImagePlus size={22} />
+                <span>{t.addImages}</span>
+              </button>
+            </div>
+          </section>
+
           {similar.length > 0 && (
             <section>
               <h2>
@@ -381,6 +485,11 @@ export function PersonView(p: Props) {
           )}
         </div>
       </div>
+      {zoom !== null && (
+        <div className="zoom" onClick={() => setZoom(null)}>
+          <img src={fileUrl("image", zoom)} alt="" />
+        </div>
+      )}
     </div>
   );
 }

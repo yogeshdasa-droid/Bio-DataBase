@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   FileDown,
+  History,
   MoreHorizontal,
   Pencil,
   Star,
@@ -49,6 +50,7 @@ interface Props {
   onBookmark: (docId: number, ordinal: number) => void;
   onEdit: (doc: DocInfo, section: SectionText) => void;
   onTrash: (doc: DocInfo) => void;
+  onVersions: (doc: DocInfo) => void;
   onSaveOriginal: (doc: DocInfo) => void;
   onExport: (doc: DocInfo) => void;
   onToast: (msg: string) => void;
@@ -356,6 +358,9 @@ export function Reader(p: Props) {
                 </button>
                 <button onClick={() => (setMenu(false), editSection())}>
                   <Pencil size={15} /> {t.editTitle}
+                </button>
+                <button onClick={() => (setMenu(false), p.onVersions(doc))}>
+                  <History size={15} /> {t.versions}
                 </button>
                 <hr />
                 <button className="danger" onClick={() => (setMenu(false), p.onTrash(doc))}>

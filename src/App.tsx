@@ -12,6 +12,7 @@ import {
   FileDown,
   FolderOpen,
   GitMerge,
+  History,
   Link as LinkIcon,
   List as ListIcon,
   Moon,
@@ -54,11 +55,15 @@ import {
 } from "./api";
 import { dicts, Lang } from "./i18n";
 import { buildNameIndex } from "./personLinks";
-import { EditDialog, ImportDialog, MergeDialog, PersonDialog, TrashDialog } from "./components/Dialogs";
+import { checkUpdate, Update } from "./update";
+import { EditDialog, ImportDialog, MergeDialog, PersonDialog, TrashDialog, VersionsDialog } from "./components/Dialogs";
 import { Home, RecentDoc } from "./components/Home";
 import { EMPTY_FILTERS, Filters, hasFilter, Results } from "./components/Results";
 import { Reader, ReaderStyle, ReaderTarget } from "./components/Reader";
 import { PersonView } from "./components/PersonView";
+import { DuplicatesDialog } from "./components/Review";
+import { Timeline } from "./components/Timeline";
+import { TreeView } from "./components/TreeView";
 import { Settings, SettingsTab, Skin, Theme } from "./components/Settings";
 import { SideTab, Sidebar } from "./components/Sidebar";
 import { Kbd, Splitter } from "./components/ui";
@@ -85,7 +90,7 @@ function usePersisted<T>(key: string, fallback: T) {
   return [v, setV] as const;
 }
 
-type Main = { kind: "home" } | { kind: "doc"; target: ReaderTarget } | { kind: "person"; id: number };
+type Main = { kind: "home" } | { kind: "timeline" } | { kind: "tree" } | { kind: "doc"; target: ReaderTarget } | { kind: "person"; id: number };
 
 type Dialog =
   | { kind: "settings"; tab: SettingsTab }
@@ -94,6 +99,8 @@ type Dialog =
   | { kind: "import"; paths: string[]; person?: { id: number; name: string } }
   | { kind: "person"; person: Person | null }
   | { kind: "merge"; person: Person; suggested: number[] }
+  | { kind: "versions"; what: "doc" | "person"; target: number; label: string }
+  | { kind: "duplicates" }
   | null;
 
 export default function App() {
@@ -134,6 +141,24 @@ export default function App() {
   const [readerDoc, setReaderDoc] = useState<DocInfo | null>(null);
   const [dataTick, setDataTick] = useState(0);
   const [resultsOpen, setResultsOpen] = useState(false);
+  const [personTag, setPersonTag] = useState<string | null>(null);
+  const [update, setUpdate] = useState<Update | null>(null);
+  // a new version on GitHub? (at most once a day)
+  useEffect(() => {
+    const day = new Date().toISOString().slice(0, 10);
+    if (stored("updateChecked", "") === day) return;
+    const h = window.setTimeout(
+      () =>
+        checkUpdate()
+          .then((u) => {
+            localStorage.setItem("bio.updateChecked", JSON.stringify(day));
+            setUpdate(u);
+          })
+          .catch(() => {}),
+      8000,
+    );
+    return () => window.clearTimeout(h);
+  }, []);
   const searchRef = useRef<HTMLInputElement>(null);
   const reqId = useRef(0);
 
@@ -151,7 +176,8 @@ export default function App() {
   const readingOrd = useRef(new Map<number, number>()); // docId → section being read
   const [, setNavTick] = useState(0);
   const samePlace = (a: Main, b: Main) =>
-    a.kind === b.kind && (a.kind === "home" || (a.kind === "person" ? a.id === (b as typeof a).id : a.target.docId === (b as typeof a).target.docId));
+    a.kind === b.kind &&
+    (a.kind === "person" ? a.id === (b as typeof a).id : a.kind === "doc" ? a.target.docId === (b as typeof a).target.docId : true);
   const withPosition = (m: Main): Main =>
     m.kind === "doc" ? { ...m, target: { ...m.target, ordinal: readingOrd.current.get(m.target.docId) ?? m.target.ordinal } } : m;
   useEffect(() => {
@@ -290,6 +316,12 @@ export default function App() {
         else showToast(d.importDone(s.added, s.duplicates, s.persons, s.millis / 1000) + (s.failed.length ? ` · ${d.importFailed(s.failed.length)}` : ""));
       }),
       listen<string>("import-error", (e) => showToast(`Error: ${e.payload}`)),
+      listen<[number, number, string]>("export-done", (e) => {
+        const d = dicts[stored<Lang>("language", "es")];
+        showToast(d.exportDone(e.payload[0], e.payload[1]));
+        api.openExternal(e.payload[2]).catch(() => {});
+      }),
+      listen<string>("backup-done", () => showToast(dicts[stored<Lang>("language", "es")].backupAutoDone)),
       listen("busy-end", () => {
         setProgress(null);
         refreshAll();
@@ -300,7 +332,14 @@ export default function App() {
         else if (p.type === "leave") setDragging(false);
         else if (p.type === "drop") {
           setDragging(false);
-          if (p.paths.length) setDialog({ kind: "import", paths: p.paths });
+          const ics = p.paths.filter((x) => x.toLowerCase().endsWith(".ics"));
+          // a calendar file is the user's Vaiṣṇava calendar, not a text
+          if (ics.length)
+            api.importCalendar(ics[0]).then(
+              (n) => (showToast(dicts[stored<Lang>("language", "es")].calendarDone(n)), refreshAll()),
+              (err) => showToast(String(err)),
+            );
+          else if (p.paths.length) setDialog({ kind: "import", paths: p.paths });
         }
       }),
     ];
@@ -323,6 +362,8 @@ export default function App() {
           dir: filters.scope?.dir ?? null,
           docId: filters.doc?.id ?? null,
           personId: filters.person?.id ?? null,
+          paramparaOnly: filters.paramparaOnly,
+          kinds: filters.kinds,
           offset,
           limit: PAGE,
         });
@@ -529,6 +570,7 @@ export default function App() {
     "sep",
     { label: t.saveOriginal, icon: Download, onClick: withDoc(docId, (d) => (d.original ? saveOriginal(d) : showToast("—"))) },
     { label: t.exportText, icon: FileDown, onClick: withDoc(docId, exportDoc) },
+    { label: t.versions, icon: History, onClick: withDoc(docId, (d) => setDialog({ kind: "versions", what: "doc", target: d.id, label: d.title })) },
     "sep",
     { label: `${t.moveToTrash}…`, icon: Trash2, danger: true, onClick: withDoc(docId, (doc) => setDialog({ kind: "trash", doc })) },
   ];
@@ -629,6 +671,7 @@ export default function App() {
           { label: t.searchInPerson, icon: TextSearch, onClick: withPerson(id, searchInPerson) },
           { label: t.findMentions, icon: Search, onClick: withPerson(id, findMentions) },
           { label: t.mergePersons, icon: GitMerge, onClick: withPerson(id, (person) => setDialog({ kind: "merge", person, suggested: [] })) },
+          { label: t.versions, icon: History, onClick: () => p && setDialog({ kind: "versions", what: "person", target: p.id, label: p.name }) },
           { label: t.importFiles, icon: Upload, onClick: () => p && pickImport({ id: p.id, name: p.name }) },
           p?.tree
             ? { label: t.removeFromParampara, icon: ListX, onClick: () => movePerson(id, null) }
@@ -844,6 +887,8 @@ export default function App() {
                 searchRef.current?.focus();
               }}
               onClearHistory={() => setHistory([])}
+              tag={personTag}
+              onTag={setPersonTag}
             />
             <Splitter onDrag={(dx) => setSideW((w) => Math.min(480, Math.max(200, w + dx)))} onDoubleClick={() => setSideW(280)} />
           </>
@@ -889,6 +934,7 @@ export default function App() {
             onBookmark={onBookmark}
             onEdit={(doc, section) => setDialog({ kind: "edit", doc, section })}
             onTrash={(doc) => setDialog({ kind: "trash", doc })}
+            onVersions={(doc) => setDialog({ kind: "versions", what: "doc", target: doc.id, label: doc.title })}
             onSaveOriginal={saveOriginal}
             onExport={exportDoc}
             onToast={showToast}
@@ -906,6 +952,12 @@ export default function App() {
             onEdit={(person) => setDialog({ kind: "person", person })}
             onMerge={(person, suggested) => setDialog({ kind: "merge", person, suggested })}
             onDelete={deletePerson}
+            onVersions={(person) => setDialog({ kind: "versions", what: "person", target: person.id, label: person.name })}
+            onTag={(tg) => {
+              setPersonTag(tg);
+              setSideTab("persons");
+              setSideOpen(true);
+            }}
             onAddText={addTextFor}
             onFindMentions={findMentions}
             onSearchIn={searchInPerson}
@@ -934,8 +986,13 @@ export default function App() {
             onRecent={(r) => openDoc(r.docId)}
             onBookmark={(b) => b.docId && openDoc(b.docId, b.ordinal)}
             onImportDefaults={importDefaults}
+            reload={dataTick}
+            onTimeline={() => setMain({ kind: "timeline" })}
+            onTree={() => setMain({ kind: "tree" })}
           />
         )}
+        {main.kind === "timeline" && <Timeline t={t} lang={lang} reload={dataTick} onPerson={openPerson} />}
+        {main.kind === "tree" && <TreeView t={t} persons={persons} onPerson={openPerson} />}
       </main>
 
       <footer className="statusbar">
@@ -949,7 +1006,7 @@ export default function App() {
             <span className="spinner" />
             {progress.phase === "scan"
               ? t.scanning
-              : `${progress.phase === "fts" ? t.rebuilding : t.importing} ${progress.done.toLocaleString(lang)} / ${progress.total.toLocaleString(lang)}`}
+              : `${progress.phase === "fts" ? t.rebuilding : progress.phase === "export" ? t.exporting : t.importing} ${progress.done.toLocaleString(lang)} / ${progress.total.toLocaleString(lang)}`}
             {pct !== null && (
               <span className="bar">
                 <span style={{ width: `${pct}%` }} />
@@ -964,6 +1021,21 @@ export default function App() {
           </span>
         )}
         <span className="spacer" />
+        {update && (
+          <span className="update-note" title={t.updateHint}>
+            <Download size={13} /> {t.updateAvailable(update.version)} ·{" "}
+            <button className="link-btn" onClick={() => api.openExternal(update.url).catch(fail)}>
+              {t.updateDownload}
+            </button>{" "}
+            ·{" "}
+            <button className="link-btn" onClick={() => api.openExternal(update.page).catch(fail)}>
+              {t.updateNotes}
+            </button>
+            <button className="icon-btn" onClick={() => setUpdate(null)}>
+              <X size={12} />
+            </button>
+          </span>
+        )}
         <span className="muted">{status ? `${Math.round(status.dbSize / 1048576)} MB` : ""}</span>
       </footer>
 
@@ -996,6 +1068,12 @@ export default function App() {
           onImportStarted={() => {
             showToast(t.importStarted);
             refreshStatus();
+          }}
+          persons={persons}
+          onDuplicates={() => setDialog({ kind: "duplicates" })}
+          onOpenDoc={(id) => {
+            setDialog(null);
+            openDoc(id);
           }}
         />
       )}
@@ -1071,6 +1149,35 @@ export default function App() {
             showToast(t.merged);
             openPerson(id);
             reloadPerson();
+            refreshAll();
+          }}
+        />
+      )}
+      {dialog?.kind === "versions" && (
+        <VersionsDialog
+          t={t}
+          kind={dialog.what}
+          target={dialog.target}
+          label={dialog.label}
+          onClose={() => setDialog(null)}
+          onRestored={() => {
+            const d = dialog;
+            setDialog(null);
+            showToast(t.versionRestored);
+            if (d.what === "doc" && main.kind === "doc" && main.target.docId === d.target)
+              setMain({ kind: "doc", target: { ...main.target, nonce: Date.now() } });
+            reloadPerson();
+            refreshAll();
+          }}
+        />
+      )}
+      {dialog?.kind === "duplicates" && (
+        <DuplicatesDialog
+          t={t}
+          persons={persons}
+          onClose={() => setDialog({ kind: "settings", tab: "review" })}
+          onChanged={() => {
+            showToast(t.merged);
             refreshAll();
           }}
         />
