@@ -201,11 +201,44 @@ Resultado: 2.301 textos, 1.883 fichas, 7 duplicados omitidos, 0 fallos.
 
 ---
 
+### Rellenar fichas a partir de los textos (cómo se hizo, para repetirlo)
+
+Se hizo el 26-10-2026 con las 33 fichas de la Guru Paramparā. Los textos son prosa libre
+(«was born in 1426 Saka…», «disciple of…»), así que no sirven reglas automáticas: **Claude lee
+los textos** y escribe los datos. Pasos:
+
+1. **Exportar** (solo lectura): un test temporal `#[ignore]` en Rust abre
+   `%APPDATA%\com.whispers.biodata\biodata.db` en modo lectura y escribe, por ficha, un archivo
+   `p<id>.txt` con sus textos (primero las notas de Obsidian, luego Goswami Grantha, luego Calibre;
+   hasta ~25.000 letras por texto) y un `index.tsv` (id, nombre, padre en el árbol, campos actuales).
+   Fichas de la Paramparā: `SELECT … FROM person_tree t JOIN persons p ON p.id = t.person_id`.
+2. **Resumir**: un script de Node deja de cada ficha el comienzo (~3.500 letras) + las frases con
+   palabras clave (born, appear, disappear, departed, initiat, disciple, guru, father, mother,
+   village, wrote, Saka, A.D., tithi, manjari…). Unas 7.000 letras por ficha.
+3. **Leer y anotar** en JSON: `{id, name, aka, appearance, disappearance, place, guru, disciples,
+   works, notes}`. Criterios: en inglés como los textos; solo lo que dicen los textos (si no
+   aparece, vacío); si las fuentes difieren, las dos («1500 (otra fuente: 1503)»); dīkṣā / śikṣā /
+   sannyāsa indicados; en notas: padres, hermanos, identidad en Kṛṣṇa-līlā y hechos principales;
+   avisar en notas si un texto es de otra persona con el mismo nombre. No poner en «otros
+   nombres» palabras genéricas (Avadhuta, Namacarya…): ese campo se usa para unir textos.
+4. **Guardar**: otro test temporal hace primero `VACUUM INTO "biodata antes de rellenar fichas.db"`,
+   comprueba que el nombre de cada id coincide, **solo rellena campos vacíos** y guarda con
+   `store::update_person` (así se actualiza también la búsqueda `persons_fts`).
+5. Borrar los tests temporales (`git checkout src-tauri/src/search.rs`) y avisar al usuario de que
+   reabra la app (si edita una ficha que tenía abierta podría pisar los datos nuevos).
+
+Para «Otros vaiṣṇavas» (~1.850 fichas, 1.539 con menos de 2.000 letras) el usuario prefirió no
+hacerlo de momento por el tiempo y el uso de Claude; si se hace, por tandas y con ayudantes en paralelo.
+
+---
+
 ## 7. Pendientes e ideas
 
 - Título de algunos .DOC con basura al principio («ÃTHE ACCEPTANCE…»).
 - 9 textos vacíos (notas vacías y 1 PDF escaneado sin texto).
-- Rellenar las fichas (fechas, guru, discípulos…), quizá a partir de los textos.
+- Rellenar las fichas (fechas, guru, discípulos…) a partir de los textos: **hecho para las 33 de la
+  Guru Paramparā** (26-10-2026, leyendo Claude los textos; solo campos vacíos, en inglés como los
+  textos). Quedan las de «Otros vaiṣṇavas».
 - Exportar todo a Markdown.
 - Muchas fichas duplicadas por variantes de nombre («Rupa Gosvami» / «Rupa Goswami,Srila»):
   repasarlas con «Unir fichas».
@@ -215,6 +248,10 @@ Resultado: 2.301 textos, 1.883 fichas, 7 duplicados omitidos, 0 fallos.
 ---
 
 ## 8. Historial
+
+- **26-10-2026**: rellenadas a mano (Claude leyó sus textos) las 33 fichas de la Guru Paramparā:
+  aparición, desaparición, lugar, guru, discípulos, obras, otros nombres y notas (padres, identidad
+  en Kṛṣṇa-līlā…). Solo campos vacíos. Copia previa: `biodata antes de rellenar fichas.db`.
 
 - **26-10-2026 — v0.2.1**: arreglo: en una instalación nueva la Guru Paramparā salía vacía
   (se rellenaba antes de la importación inicial, cuando aún no había fichas).

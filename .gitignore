@@ -6,3 +6,6 @@ src-tauri/gen/
 CLAUDE.md
 .vscode/*
 !.vscode/extensions.json
+*.db
+*.db-wal
+*.db-shm
